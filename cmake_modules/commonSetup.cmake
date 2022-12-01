@@ -1,4 +1,38 @@
-﻿################################################################################
+﻿Skip to content
+Search or jump to…
+Pull requests
+Issues
+Codespaces
+Marketplace
+Explore
+ 
+@jackdelv 
+hpcc-systems
+/
+HPCC-Platform
+Public
+Fork your own copy of hpcc-systems/HPCC-Platform
+Code
+Pull requests
+79
+Discussions
+Actions
+Projects
+Wiki
+Security
+Insights
+Beta Try the new code view
+HPCC-Platform/cmake_modules/commonSetup.cmake
+@ghalliday
+ghalliday Merge pull request #16853 from hpcc-systems/newbuild
+…
+Latest commit 088957a on Jan 18
+ History
+ 19 contributors
+@richardkchapman@ghalliday@xwang2713@mckellyln@pschwartz@Michael-Gardner@jakesmith@GordonSmith@wangkx@shamser@jamienoss@dcamper
+1279 lines (1164 sloc)  49.4 KB
+
+################################################################################
 #    HPCC SYSTEMS software Copyright (C) 2012 HPCC Systems®.
 #
 #    Licensed under the Apache License, Version 2.0 (the "License");
@@ -160,7 +194,6 @@ IF ("${COMMONSETUP_DONE}" STREQUAL "")
   
     # Plugin options
     set(PLUGINS_LIST
-<<<<<<< HEAD
         CASSANDRAEMBED
         COUCHBASEEMBED
         ECLBLAS
@@ -176,22 +209,6 @@ IF ("${COMMONSETUP_DONE}" STREQUAL "")
         SQLITE3EMBED
         SQS
         V8EMBED
-=======
-    REMBED
-    V8EMBED
-    MEMCACHED
-    REDIS
-    SQS
-    MYSQLEMBED
-    JAVAEMBED
-    SQLITE3EMBED
-    KAFKA
-    COUCHBASEEMBED
-    SPARK
-    ECLBLAS
-    MONGODBEMBED
-    PARQUETEMBED
->>>>>>> Initial commit
     EXAMPLEPLUGIN)
     foreach(plugin ${PLUGINS_LIST})
         option(${plugin} "Create a package with ONLY the ${plugin} plugin" OFF)

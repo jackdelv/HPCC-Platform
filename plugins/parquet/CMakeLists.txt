@@ -24,14 +24,12 @@
 #############################################################
 
 project(parquetembed)
-message("CMAKE Version: ${CMAKE_VERSION}")
 
 if(PARQUETEMBED)
     ADD_PLUGIN(parquetembed)
     if(MAKE_PARQUETEMBED)
+        find_package(Arrow CONFIG REQUIRED)
         find_package(Parquet CONFIG REQUIRED)
-        find_library(ARROWDATASET arrow_dataset ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib REQUIRED)
-        list(APPEND CMAKE_INSTALL_RPATH ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib)
 
         set(
             SRCS
@@ -56,37 +54,25 @@ if(PARQUETEMBED)
             DESTINATION plugins
         )
 
-        # install(
-        #     FILES ${LIBPARQUET_LIB_REAL}
-        #     DESTINATION ${LIB_DIR}
-        #     PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        #     COMPONENT Runtime)
+        install(
+            FILES ${LIBARROW_LIB_REAL}
+            DESTINATION ${LIB_DIR}
+            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            COMPONENT Runtime)
 
-        # install(
-        #     FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
-        #     DESTINATION ${LIB_DIR}
-        #     COMPONENT Runtime)
-            
-        # install(
-        #     FILES ${LIBARROW_LIB_REAL}
-        #     DESTINATION ${LIB_DIR}
-        #     PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        #     COMPONENT Runtime)
+        install(
+            FILES ${LIBARROW_LIB} ${LIBARROW_LIB_ABI}
+            DESTINATION ${LIB_DIR}
+            COMPONENT Runtime)
 
-        # install(
-        #     FILES ${LIBARROW_LIB} ${LIBARROW_LIB_ABI}
-        #     DESTINATION ${LIB_DIR}
-        #     COMPONENT Runtime)
-
-        message("Dataset: ${ARROWDATASET}")
+        # install the packages here look at mongodb CMake file
 
         target_link_libraries(
             parquetembed
+            PRIVATE ${ARROW_LIBRARIES}
+            PRIVATE ${PARQUET_LIBRARIES}
             eclrtl
             jlib
-            Parquet::parquet_shared
-            Arrow::arrow_shared
-            ${ARROWDATASET}
         )
     endif()
 endif()

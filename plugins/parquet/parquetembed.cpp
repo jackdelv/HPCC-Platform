@@ -68,7 +68,6 @@ namespace parquetembed
     //--------------------------------------------------------------------------
     // Plugin Classes
     //--------------------------------------------------------------------------
-
     /**
      * @brief Throws an exception and gets called when an operation that is unsupported is attempted.
      * 

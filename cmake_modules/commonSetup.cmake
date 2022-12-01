@@ -160,6 +160,7 @@ IF ("${COMMONSETUP_DONE}" STREQUAL "")
   
     # Plugin options
     set(PLUGINS_LIST
+<<<<<<< HEAD
         CASSANDRAEMBED
         COUCHBASEEMBED
         ECLBLAS
@@ -175,6 +176,22 @@ IF ("${COMMONSETUP_DONE}" STREQUAL "")
         SQLITE3EMBED
         SQS
         V8EMBED
+=======
+    REMBED
+    V8EMBED
+    MEMCACHED
+    REDIS
+    SQS
+    MYSQLEMBED
+    JAVAEMBED
+    SQLITE3EMBED
+    KAFKA
+    COUCHBASEEMBED
+    SPARK
+    ECLBLAS
+    MONGODBEMBED
+    PARQUETEMBED
+>>>>>>> Initial commit
     EXAMPLEPLUGIN)
     foreach(plugin ${PLUGINS_LIST})
         option(${plugin} "Create a package with ONLY the ${plugin} plugin" OFF)

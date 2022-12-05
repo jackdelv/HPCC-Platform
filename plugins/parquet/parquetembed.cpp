@@ -34,6 +34,12 @@
 // #include <time.h>
 // #include <vector>
 
+#include "arrow/api.h"
+#include "arrow/io/api.h"
+#include "parquet/arrow/reader.h"
+#include "parquet/arrow/writer.h"
+#include "parquet/exception.h"
+
 static constexpr const char *MODULE_NAME = "parquet";
 static constexpr const char *MODULE_DESCRIPTION = "Parquet Embed Helper";
 static constexpr const char *VERSION = "Parquet Embed Helper 1.0.0";

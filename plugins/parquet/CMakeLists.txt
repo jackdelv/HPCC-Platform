@@ -59,10 +59,8 @@ if(PARQUETEMBED)
             parquetembed
             eclrtl
             jlib
-            ${PARQUET_LIBRARIES}
-            ${ARROW_LIBRARIES}
-            # Parquet::parquet_shared
-            # Arrow::arrow_shared
+            Parquet::parquet_shared
+            Arrow::arrow_shared
         )
     endif()
 endif()

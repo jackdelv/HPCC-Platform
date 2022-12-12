@@ -92,6 +92,7 @@
             "name": "python3",
             "platform": "windows"
         },
+        "parquet",
         "rapidjson",
         "sqlite3",
         "tbb",

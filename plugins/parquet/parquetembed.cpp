@@ -13,28 +13,22 @@
 
 #include "parquetembed.hpp"
 
-#include <map>
-#include <mutex>
-#include <thread>
-#include <cstdlib>
-#include <iostream>
-#include <string>
-#include <memory>
-#include <cstdint>
+// #include <map>
+// #include <mutex>
+// #include <thread>
+// #include <cstdlib>
+// #include <iostream>
+// #include <string>
+// #include <memory>
+// #include <cstdint>
 
-#include "platform.h"
-#include "jthread.hpp"
+// #include "platform.h"
+// #include "jthread.hpp"
 #include "rtlembed.hpp"
-#include "jptree.hpp"
-#include "rtlds_imp.hpp"
-#include <time.h>
-#include <vector>
-
-#include "arrow/api.h"
-#include "arrow/io/api.h"
-#include "parquet/arrow/reader.h"
-#include "parquet/arrow/writer.h"
-#include "parquet/exception.h"
+// #include "jptree.hpp"
+// #include "rtlds_imp.hpp"
+// #include <time.h>
+// #include <vector>
 
 static constexpr const char *MODULE_NAME = "parquet";
 static constexpr const char *MODULE_DESCRIPTION = "Parquet Embed Helper";

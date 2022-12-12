@@ -29,7 +29,6 @@ message("CMAKE Version: ${CMAKE_VERSION}")
 if(PARQUETEMBED)
     ADD_PLUGIN(parquetembed)
     if(MAKE_PARQUETEMBED)
-        find_package(Arrow CONFIG REQUIRED)
         find_package(Parquet CONFIG REQUIRED)
         find_library(ARROWDATASET arrow_dataset ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib REQUIRED)
         list(APPEND CMAKE_INSTALL_RPATH ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib)
@@ -37,6 +36,7 @@ if(PARQUETEMBED)
         set(
             SRCS
             parquetembed.cpp
+            parquethelper.cpp
         )
 
         INCLUDE_DIRECTORIES(

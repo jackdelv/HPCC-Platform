@@ -14,7 +14,13 @@
 			"-DUSE_AWS=ON",
 			"-DUSE_JAVA=ON"
 		],
-		"editor.formatOnSave": false
+		"editor.formatOnSave": false,
+		"files.associations": {
+			"*.json": "json",
+			"*.mod": "ecl",
+			"string_view": "cpp",
+			"iosfwd": "cpp"
+		}
 	},
 	"extensions": {
 		"recommendations": [

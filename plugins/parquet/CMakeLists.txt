@@ -55,6 +55,28 @@ if(PARQUETEMBED)
             DESTINATION plugins
         )
 
+        install(
+            FILES ${LIBPARQUET_LIB_REAL}
+            DESTINATION ${LIB_DIR}
+            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            COMPONENT Runtime)
+
+        install(
+            FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
+            DESTINATION ${LIB_DIR}
+            COMPONENT Runtime)
+            
+        install(
+            FILES ${LIBARROW_LIB_REAL}
+            DESTINATION ${LIB_DIR}
+            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            COMPONENT Runtime)
+
+        install(
+            FILES ${LIBARROW_LIB} ${LIBARROW_LIB_ABI}
+            DESTINATION ${LIB_DIR}
+            COMPONENT Runtime)        
+
         target_link_libraries(
             parquetembed
             eclrtl

@@ -118,7 +118,7 @@ namespace parquetembed
     };
 
     /**
-     * @brief Binds ECL records to bson Documents
+     * @brief Binds ECL records to parquet objects
      * 
      */
     class ParquetRecordBinder : public CInterfaceOf<IFieldProcessor>
@@ -183,7 +183,7 @@ namespace parquetembed
     };
 
     /**
-     * @brief Binds an ECL dataset to a vector of bson documents.
+     * @brief Binds an ECL dataset to a vector of parquet objects.
      * 
      */
     class ParquetDatasetBinder : public ParquetRecordBinder

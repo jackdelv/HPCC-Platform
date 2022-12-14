@@ -8,26 +8,11 @@
 		"cmake.configureArgs": [
 			"-DCONTAINERIZED=OFF",
 			"-DUSE_OPTIONAL=OFF",
-<<<<<<< HEAD
 			"-DINCLUDE_PLUGINS=ON",
 			"-DSUPPRESS_V8EMBED=ON",
 			"-DSUPPRESS_REMBED=ON"
-=======
-			"-DINCLUDE_PLUGINS=OFF",
-			"-DINCLUDE_PARQUETEMBED=ON",
-			"-DCMAKE_BUILD_TYPE=Debug",
-			"-DUSE_LIBMEMCACHED=OFF",
-			"-DUSE_NUMA=OFF",
-			"-DUSE_ICU=ON"
->>>>>>> Not sure what this does.
 		],
-		"editor.formatOnSave": false,
-		"files.associations": {
-			"*.json": "json",
-			"*.mod": "ecl",
-			"string_view": "cpp",
-			"iosfwd": "cpp"
-		}
+		"editor.formatOnSave": false
 	},
 	"extensions": {
 		"recommendations": [

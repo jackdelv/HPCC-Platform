@@ -103,6 +103,194 @@ namespace parquetembed
         rtlFail(0, msg.str());
     }
 
+    ParquetRowStream::ParquetRowStream(IEngineRowAllocator* _resultAllocator)
+    {
+        // TODO
+    }
+    ParquetRowStream::~ParquetRowStream()
+    {
+        // TODO
+    }
+    const void* ParquetRowStream::nextRow()
+    {
+        // TODO
+        return nullptr;
+    }
+    void ParquetRowStream::stop()
+    {
+        // TODO
+    }
+
+    bool ParquetRowBuilder::getBooleanResult(const RtlFieldInfo *field)
+    {
+        // TODO
+        return true;
+    }
+
+    void ParquetRowBuilder::getDataResult(const RtlFieldInfo *field, size32_t &len, void * &result)
+    {
+        // TODO
+    }
+
+    double ParquetRowBuilder::getRealResult(const RtlFieldInfo *field)
+    {
+        // TODO
+        return 1.1;
+    }
+
+    __int64 ParquetRowBuilder::getSignedResult(const RtlFieldInfo *field)
+    {
+        // TODO
+        return 1;
+    }
+
+    unsigned __int64 ParquetRowBuilder::getUnsignedResult(const RtlFieldInfo *field)
+    {
+        // TODO
+        return 1;
+    }
+
+    void ParquetRowBuilder::getStringResult(const RtlFieldInfo *field, size32_t &chars, char * &result)
+    {
+        // TODO
+    }
+
+    void ParquetRowBuilder::getUTF8Result(const RtlFieldInfo *field, size32_t &chars, char * &result)
+    {
+        // TODO
+    }
+
+    void ParquetRowBuilder::getUnicodeResult(const RtlFieldInfo *field, size32_t &chars, UChar * &result)
+    {
+        // TODO
+    }
+
+    void ParquetRowBuilder::getDecimalResult(const RtlFieldInfo *field, Decimal &value)
+    {
+        // TODO
+    }
+
+    void ParquetRowBuilder::processBeginSet(const RtlFieldInfo * field, bool &isAll)
+    {
+        // TODO
+    }
+
+    bool ParquetRowBuilder::processNextSet(const RtlFieldInfo * field)
+    {
+        // TODO
+        return true;
+    }
+
+    void ParquetRowBuilder::processBeginDataset(const RtlFieldInfo * field)
+    {
+        // TODO
+    }
+
+    void ParquetRowBuilder::processBeginRow(const RtlFieldInfo * field)
+    {
+        // TODO
+    }
+
+    bool ParquetRowBuilder::processNextRow(const RtlFieldInfo * field)
+    {
+        // TODO
+        return true;
+    }
+
+    void ParquetRowBuilder::processEndSet(const RtlFieldInfo * field)
+    {
+        // TODO
+    }
+
+    void ParquetRowBuilder::processEndDataset(const RtlFieldInfo * field)
+    {
+        // TODO
+    }
+
+    void ParquetRowBuilder::processEndRow(const RtlFieldInfo * field)
+    {
+        // TODO
+    }    
+
+
+    const char * ParquetRowBuilder::nextField(const RtlFieldInfo * field)
+    {
+        // TO DO
+        return nullptr;
+    }
+
+    void ParquetRowBuilder::xpathOrName(StringBuffer & outXPath, const RtlFieldInfo * field) const
+    {
+        // TO DO
+    }
+
+    void ParquetRowBuilder::constructNewXPath(StringBuffer& outXPath, const char * nextNode) const
+    {
+        // TO DO
+    }    
+
+    int ParquetRecordBinder::numFields()
+    {
+        // TO DO
+        return 1;
+    }
+
+    void ParquetRecordBinder::processRow(const byte *row)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processString(unsigned len, const char *value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processBool(bool value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processData(unsigned len, const void *value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processInt(__int64 value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processUInt(unsigned __int64 value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processReal(double value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processDecimal(const void *value, unsigned digits, unsigned precision, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+
+    void ParquetRecordBinder::processUnicode(unsigned chars, const UChar *value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processQString(unsigned len, const char *value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
+    void ParquetRecordBinder::processUtf8(unsigned chars, const char *value, const RtlFieldInfo * field)
+    {
+        // TO DO
+    }
+
     /**
      * @brief Construct a new ParquetEmbedFunctionContext object
      * 
@@ -146,6 +334,154 @@ namespace parquetembed
     ParquetEmbedFunctionContext::~ParquetEmbedFunctionContext()
     {
     }
+
+    bool ParquetEmbedFunctionContext::getBooleanResult()
+    {
+        // TO DO
+        return true;
+    }
+
+    void ParquetEmbedFunctionContext::getDataResult(size32_t &len, void * &result)
+    {
+        // TO DO
+    }
+
+    double ParquetEmbedFunctionContext::getRealResult()
+    {
+        // TO DO
+        return 1.2;
+    }
+
+    __int64 ParquetEmbedFunctionContext::getSignedResult()
+    {
+        // TO DO
+        return 2;
+    }
+
+    unsigned __int64 ParquetEmbedFunctionContext::getUnsignedResult()
+    {
+        // TO DO
+        return 3;
+    }
+
+    void ParquetEmbedFunctionContext::getStringResult(size32_t &chars, char * &result)
+    {
+        // TO DO
+    }
+
+    void ParquetEmbedFunctionContext::getUTF8Result(size32_t &chars, char * &result)
+    {
+        // TO DO
+    }
+
+    void ParquetEmbedFunctionContext::getUnicodeResult(size32_t &chars, UChar * &result)
+    {
+        // TO DO
+    }
+
+    void ParquetEmbedFunctionContext::getDecimalResult(Decimal &value)
+    {
+        // TO DO
+    }
+
+
+    IRowStream * ParquetEmbedFunctionContext::getDatasetResult(IEngineRowAllocator * _resultAllocator)
+    {
+        // TO DO    
+        return nullptr;
+    }
+
+    byte * ParquetEmbedFunctionContext::getRowResult(IEngineRowAllocator * _resultAllocator)
+    {
+        // TO DO
+        return nullptr;    
+    }
+
+    size32_t ParquetEmbedFunctionContext::getTransformResult(ARowBuilder & rowBuilder)
+    {
+        // TO DO  
+        return 0;  
+    }
+
+    void ParquetEmbedFunctionContext::bindRowParam(const char *name, IOutputMetaData & metaVal, const byte *val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindDatasetParam(const char *name, IOutputMetaData & metaVal, IRowStream * val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindBooleanParam(const char *name, bool val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindDataParam(const char *name, size32_t len, const void *val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindFloatParam(const char *name, float val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindRealParam(const char *name, double val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindSignedSizeParam(const char *name, int size, __int64 val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindSignedParam(const char *name, __int64 val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindUnsignedSizeParam(const char *name, int size, unsigned __int64 val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindUnsignedParam(const char *name, unsigned __int64 val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindStringParam(const char *name, size32_t len, const char *val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindVStringParam(const char *name, const char *val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindUTF8Param(const char *name, size32_t chars, const char *val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::bindUnicodeParam(const char *name, size32_t chars, const UChar *val)
+    {
+        // TO DO    
+    }
+
+    void ParquetEmbedFunctionContext::compileEmbeddedScript(size32_t chars, const char *script)
+    {
+        // TODO
+    }
+
+    void ParquetEmbedFunctionContext::callFunction()
+    {
+        // TODO
+    };
 
     /**
      * @brief Serves as the entry point for the HPCC Engine into the plugin and is how it obtains a 

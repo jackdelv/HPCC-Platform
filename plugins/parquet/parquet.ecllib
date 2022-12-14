@@ -15,7 +15,7 @@
     limitations under the License.
 ############################################################################## */
 
-EXPORT Language := SERVICE : plugin('parquetbembed')
+EXPORT Language := SERVICE : plugin('parquetembed')
   boolean getEmbedContext():cpp,pure,namespace='parquetembed',entrypoint='getEmbedContext',prototype='IEmbedContext* getEmbedContext()';
 END;
 

@@ -113,26 +113,31 @@ namespace parquetembed
     ParquetEmbedFunctionContext::ParquetEmbedFunctionContext(const IContextLogger &_logctx, const char *options, unsigned _flags)
     : logctx(_logctx), m_NextRow(), m_nextParam(0), m_numParams(0), m_scriptFlags(_flags)
     {
-        // // Option Variables
-        // const char *option = "";
-        // // Iterate through user options and save them
-        // StringArray inputOptions;
-        // inputOptions.appendList(options, ",");
-        // ForEachItemIn(idx, inputOptions) 
-        // {
-        //     const char *opt = inputOptions.item(idx);
-        //     const char *val = strchr(opt, '=');
-        //     if (val)
-        //     {
-        //         StringBuffer optName(val-opt, opt);
-        //         val++;
-        //         if (stricmp(optName, "option")==0)
-        //             // Store in option variables
-        //             option = val;
-        //         else
-        //             failx("Unknown option %s", optName.str());
-        //     }
-        // }
+        // Option Variables
+        const char *option = ""; // Read(r), Write(w)
+        const char *location = ""; // file name and location of where to write parquet file
+        const char *destination = ""; // file name and location of where to read parquet file from
+        // Iterate through user options and save them
+        StringArray inputOptions;
+        inputOptions.appendList(options, ",");
+        ForEachItemIn(idx, inputOptions) 
+        {
+            const char *opt = inputOptions.item(idx);
+            const char *val = strchr(opt, '=');
+            if (val)
+            {
+                StringBuffer optName(val-opt, opt);
+                val++;
+                if (stricmp(optName, "option") == 0)
+                    option = val;
+                else if (stricmp(optName, "location") == 0)
+                    location = val;
+                else if (stricmp(optName, "destination") == 0)
+                    destination = val;
+                else
+                    failx("Unknown option %s", optName.str());
+            }
+        }
     }
 
     /**

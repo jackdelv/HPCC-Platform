@@ -227,12 +227,23 @@ namespace parquetembed
     void ParquetRowBuilder::constructNewXPath(StringBuffer& outXPath, const char * nextNode) const
     {
         // TO DO
+    }
+
+    unsigned ParquetRecordBinder::checkNextParam(const RtlFieldInfo * field)
+    {
+        if (logctx.queryTraceLevel() > 4) 
+            logctx.CTXLOG("Binding %s to %d", field->name, thisParam);
+        return thisParam++;       
     }    
 
     int ParquetRecordBinder::numFields()
     {
-        // TO DO
-        return 1;
+        int count = 0;
+        const RtlFieldInfo * const *fields = typeInfo->queryFields();
+        assertex(fields);
+        while (*fields++) 
+            count++;
+        return count;
     }
 
     void ParquetRecordBinder::processRow(const byte *row)
@@ -384,7 +395,6 @@ namespace parquetembed
         // TO DO
     }
 
-
     IRowStream * ParquetEmbedFunctionContext::getDatasetResult(IEngineRowAllocator * _resultAllocator)
     {
         // TO DO    
@@ -410,7 +420,12 @@ namespace parquetembed
 
     void ParquetEmbedFunctionContext::bindDatasetParam(const char *name, IOutputMetaData & metaVal, IRowStream * val)
     {
-        // TO DO    
+        if (m_oInputStream) 
+        {
+            fail("At most one dataset parameter supported");
+        }
+        m_oInputStream.setown(new ParquetDatasetBinder(logctx, LINK(val), metaVal.queryTypeInfo(), m_nextParam));
+        m_nextParam += m_oInputStream->numFields();   
     }
 
     void ParquetEmbedFunctionContext::bindBooleanParam(const char *name, bool val)
@@ -473,15 +488,56 @@ namespace parquetembed
         // TO DO    
     }
 
+    /**
+     * @brief Compiles the embedded script passed in by the user. The script is placed inside the EMBED
+     * and ENDEMBED block.
+     * 
+     * @param chars THe number of chars in the script.
+     * 
+     * @param script The embedded script for compilation.
+     */
     void ParquetEmbedFunctionContext::compileEmbeddedScript(size32_t chars, const char *script)
     {
-        // TODO
+        if (script && *script) 
+        {
+            // Incoming script is not necessarily null terminated. Note that the chars refers to utf8 characters and not bytes.
+            size32_t size = rtlUtf8Size(chars, script);
+
+            if (size > 0) 
+            {
+                StringAttr queryScript;
+                queryScript.set(script, size);
+                // Do something with the script now that is is done processing
+                // queryScript.get()
+            }
+            else
+                failx("Empty query detected");
+        }
+        else
+            failx("Empty query detected");
+    }
+    
+    void ParquetEmbedFunctionContext::execute()
+    {
+        if (m_oInputStream)
+            m_oInputStream->executeAll();
+        else
+        {
+            // TODO
+        }
     }
 
     void ParquetEmbedFunctionContext::callFunction()
     {
-        // TODO
-    };
+        execute();
+    }
+
+    unsigned ParquetEmbedFunctionContext::checkNextParam(const char *name)
+    {
+        if (m_nextParam == m_numParams)
+            failx("Too many parameters supplied: No matching $<name> placeholder for parameter %s", name);
+        return m_nextParam++;
+    }
 
     /**
      * @brief Serves as the entry point for the HPCC Engine into the plugin and is how it obtains a 

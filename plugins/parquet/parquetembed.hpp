@@ -34,6 +34,59 @@ namespace parquetembed
     extern void failx(const char *msg, ...) __attribute__((noreturn))  __attribute__((format(printf, 1, 2)));
     extern void fail(const char *msg) __attribute__((noreturn));
 
+    static void typeError(const char *expected, const char * fieldname)
+    {
+        VStringBuffer msg("MongoDBembed: type mismatch - %s expected", expected);
+        if (!isEmptyString(fieldname))
+            msg.appendf(" for field %s", fieldname);
+        rtlFail(0, msg.str());
+    }
+
+    static void typeError(const char *expected, const RtlFieldInfo *field)
+    {
+        typeError(expected, field ? field->name : nullptr);
+    }
+
+    static int getNumFields(const RtlTypeInfo *record)
+    {
+        int count = 0;
+        const RtlFieldInfo * const *fields = record->queryFields();
+        assertex(fields);
+        while (*fields++)
+            count++;
+        return count;
+    }
+
+    static void handleDeserializeOutcome(DeserializationResult resultcode, const char * targetype, const char * culpritvalue)
+    {
+        switch (resultcode)
+        {
+            case Deserialization_SUCCESS:
+                break;
+            case Deserialization_BAD_TYPE:
+                failx("Deserialization error (%s): value cannot be const", targetype);
+                break;
+            case Deserialization_UNSUPPORTED:
+                failx("Deserialization error (%s): encountered value type not supported", targetype);
+                break;
+            case Deserialization_INVALID_TOKEN:
+                failx("Deserialization error (%s): token cannot be NULL, empty, or all whitespace", targetype);
+                break;
+            case Deserialization_NOT_A_NUMBER:
+                failx("Deserialization error (%s): non-numeric characters found in numeric conversion: '%s'", targetype, culpritvalue);
+                break;
+            case Deserialization_OVERFLOW:
+                failx("Deserialization error (%s): number too large to be represented by receiving value", targetype);
+                break;
+            case Deserialization_UNDERFLOW:
+                failx("Deserialization error (%s): number too small to be represented by receiving value", targetype);
+                break;
+            default:
+                typeError(targetype, culpritvalue);
+                break;
+        }
+    }
+
     enum PathNodeType {CPNTScalar, CPNTDataset, CPNTSet};
 
     struct PathTracker
@@ -300,8 +353,6 @@ namespace parquetembed
 
        protected:
            void execute();
-           unsigned countBindings(const char *query);
-           const char * findUnquoted(const char *query, char searchFor);
            unsigned checkNextParam(const char *name);
            const IContextLogger &logctx;
            Owned<IPropertyTreeIterator> m_resultrow;

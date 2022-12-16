@@ -316,6 +316,7 @@ namespace parquetembed
         const char *option = ""; // Read(r), Write(w)
         const char *location = ""; // file name and location of where to write parquet file
         const char *destination = ""; // file name and location of where to read parquet file from
+        int rowsize = 1000;
         // Iterate through user options and save them
         StringArray inputOptions;
         inputOptions.appendList(options, ",");
@@ -333,10 +334,14 @@ namespace parquetembed
                     location = val;
                 else if (stricmp(optName, "destination") == 0)
                     destination = val;
+                else if (stricmp(optName, "MaxRowSize") == 0)
+                    rowsize = atoi(val);
                 else
                     failx("Unknown option %s", optName.str());
             }
         }
+        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, rowsize));
+        m_parquet = ptr;
     }
 
     /**
@@ -498,23 +503,24 @@ namespace parquetembed
      */
     void ParquetEmbedFunctionContext::compileEmbeddedScript(size32_t chars, const char *script)
     {
-        if (script && *script) 
-        {
-            // Incoming script is not necessarily null terminated. Note that the chars refers to utf8 characters and not bytes.
-            size32_t size = rtlUtf8Size(chars, script);
+        // Not sure if there will be an embedded script.
+        // if (script && *script) 
+        // {
+        //     // Incoming script is not necessarily null terminated. Note that the chars refers to utf8 characters and not bytes.
+        //     size32_t size = rtlUtf8Size(chars, script);
 
-            if (size > 0) 
-            {
-                StringAttr queryScript;
-                queryScript.set(script, size);
-                // Do something with the script now that is is done processing
-                // queryScript.get()
-            }
-            else
-                failx("Empty query detected");
-        }
-        else
-            failx("Empty query detected");
+        //     if (size > 0) 
+        //     {
+        //         StringAttr queryScript;
+        //         queryScript.set(script, size);
+        //         // Do something with the script now that is is done processing
+        //         // queryScript.get()
+        //     }
+        //     else
+        //         failx("Empty query detected");
+        // }
+        // else
+        //     failx("Empty query detected");
     }
     
     void ParquetEmbedFunctionContext::execute()

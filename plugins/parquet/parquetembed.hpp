@@ -259,10 +259,12 @@ namespace parquetembed
          * @param _query Holds the builder object for creating the documents.
          * @param _firstParam Index of the first param.
          */
-        ParquetDatasetBinder(const IContextLogger &_logctx, IRowStream * _input, const RtlTypeInfo *_typeInfo, int _firstParam)
+        ParquetDatasetBinder(const IContextLogger &_logctx, IRowStream * _input, const RtlTypeInfo *_typeInfo, std::shared_ptr<ParquetHelper> _parquet, int _firstParam)
             : input(_input), ParquetRecordBinder(_logctx, _typeInfo, _firstParam)
         {
+            d_parquet = _parquet;
         }
+        void getFieldTypes(const RtlTypeInfo *typeInfo);
 
         /**
          * @brief Gets the next ECL row.
@@ -288,6 +290,7 @@ namespace parquetembed
 
     protected:
         Owned<IRowStream> input;
+        std::shared_ptr<ParquetHelper> d_parquet;       //! Helper object for keeping track of read and write options, schema, and file names.
     };
 
     /**
@@ -483,7 +486,7 @@ namespace parquetembed
         unsigned m_numParams;                           //! Number of parameters in the function definition.
         unsigned m_scriptFlags;                         //! Count of flags raised by embedded script.
 
-        std::shared_ptr<ParquetHelper> m_parquet;                        //! Helper object for keeping track of read and write options, schema, and file names.
+        std::shared_ptr<ParquetHelper> m_parquet;       //! Helper object for keeping track of read and write options, schema, and file names.
     };
 }
 #endif

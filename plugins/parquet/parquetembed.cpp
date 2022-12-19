@@ -302,6 +302,114 @@ namespace parquetembed
         // TO DO
     }
 
+    void ParquetDatasetBinder::getFieldTypes(const RtlTypeInfo *typeInfo)
+    {
+        const RtlFieldInfo * const *fields = typeInfo->queryFields();
+        assertex(fields);
+        while (*fields){
+            const char * name = fields->name;
+            enum parquet::Type::type type;
+            enum parquet::ConvertedType::type ctype;
+            int length = -1;
+            switch(fields->type->getType())
+            {
+                case type_boolean:
+                    type = BOOLEAN;
+                    ctype = NONE;
+                    break;
+                case type_int:
+                    if(fields->type->length > 4)
+                    {
+                        type = INT64;
+                        ctype = INT_64;
+                    }
+                    else if(fields->type->length > 2)
+                    {
+                        type = INT32;
+                        ctype = INT_32;
+                    }
+                    else if(fields->type->length > 1)
+                    {
+                        type = INT32;
+                        ctype = INT_16;
+                    }
+                    else
+                    {
+                        type = INT32;
+                        ctype = INT_8;
+                    } 
+                    break;
+                case type_unsigned:
+                    if(fields->type->length > 4)
+                    {
+                        type = INT64;
+                        ctype = UINT_64;
+                    }
+                    else if(fields->type->length > 2)
+                    {
+                        type = INT32;
+                        ctype = UINT_32;
+                    }
+                    else if(fields->type->length > 1)
+                    {
+                        type = INT32;
+                        ctype = UINT_16;
+                    }
+                    else
+                    {
+                        type = INT32;
+                        ctype = UINT_8;
+                    } 
+                    break;
+                case type_real:
+                    type = FLOAT;
+                    ctype = NONE;
+                    break;
+                case type_decimal:
+                    type = FLOAT;
+                    ctype = DECIMAL;
+                    break;
+                case type_string:
+                    type = BYTE_ARRAY;
+                    ctype = UTF8;
+                    break;
+                case type_char:
+                    type = FIXED_LEN_BYTE_ARRAY;
+                    ctype = NONE;
+                    length = fields->type->length;
+                    break;
+                case type_record:
+                    
+                    break;
+                case type_varstring:
+                    type = BYTE_ARRAY;
+                    ctype = UTF8;
+                    break;
+                case type_set:
+                    
+                    break;
+                case type_row:
+                    
+                    break;
+                case type_qstring:
+                    type = BYTE_ARRAY;
+                    ctype = UTF8;
+                    break;
+                case type_unicode:
+                    UNSUPPORTED("UNICODE datatype");
+                    break;
+                case type_utf8:
+                    type = BYTE_ARRAY;
+                    ctype = UTF8;
+                    break;
+                default:
+                    failx("Datatype %i is not compatible with this plugin.");
+            }
+            d_parquet->addField(name, REQUIRED, type, ctype);
+            fields++;
+        }
+    }
+
     /**
      * @brief Construct a new ParquetEmbedFunctionContext object
      * 
@@ -429,7 +537,7 @@ namespace parquetembed
         {
             fail("At most one dataset parameter supported");
         }
-        m_oInputStream.setown(new ParquetDatasetBinder(logctx, LINK(val), metaVal.queryTypeInfo(), m_nextParam));
+        m_oInputStream.setown(new ParquetDatasetBinder(logctx, LINK(val), metaVal.queryTypeInfo(), m_parquet, m_nextParam));
         m_nextParam += m_oInputStream->numFields();   
     }
 

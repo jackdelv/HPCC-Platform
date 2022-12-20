@@ -631,8 +631,11 @@ namespace parquetembed
              * @param rowsize The max row group size when reading parquet files.
              */
             ParquetHelper(const char * option, const char * location, const char * destination, int rowsize)
-                : p_option(option), p_location(location), p_destination(destination), maxRowSize(rowsize)
             {
+                p_option = option;
+                p_location = location;
+                p_destination = destination;
+                maxRowSize = rowsize;
             }
 
             /**
@@ -709,11 +712,21 @@ namespace parquetembed
                 return parquet_read;
             }
 
+            /**
+             * @brief Returns the maximum size of the row group set by the user. Default is 1000.
+             * 
+             * @return int Maximum size of the row group.
+             */
+            int maxRoWSize()
+            {
+                return maxRowSize;
+            }
+
         private:
             int maxRowSize;                                                     //! The maximum size of each parquet row group.
-            const char * p_option;                                              //! Read, r, Write, w, option for specifying parquet operation.
-            const char * p_location;                                            //! Location to read parquet file from.
-            const char * p_destination;                                         //! Destination to write parquet file to.
+            std::string p_option;                                              //! Read, r, Write, w, option for specifying parquet operation.
+            std::string p_location;                                            //! Location to read parquet file from.
+            std::string p_destination;                                         //! Destination to write parquet file to.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.

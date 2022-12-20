@@ -244,7 +244,7 @@ namespace parquetembed
     class ParquetRowStream : public RtlCInterface, implements IRowStream
     {
     public:
-        ParquetRowStream(IEngineRowAllocator* _resultAllocator);
+        ParquetRowStream(IEngineRowAllocator* _resultAllocator, std::shared_ptr<ParquetHelper> _parquet);
         virtual ~ParquetRowStream();
 
         RTLIMPLEMENT_IINTERFACE

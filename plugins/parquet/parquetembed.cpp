@@ -403,9 +403,9 @@ namespace parquetembed
                     ctype = UTF8;
                     break;
                 default:
-                    failx("Datatype %i is not compatible with this plugin.");
+                    failx("Datatype %i is not compatible with this plugin.", fields->type->getType());
             }
-            d_parquet->addField(name, REQUIRED, type, ctype);
+            d_parquet->addField(name, REQUIRED, type, ctype, length);
             fields++;
         }
     }

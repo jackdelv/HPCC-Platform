@@ -116,6 +116,115 @@ namespace parquetembed
     };
 
     /**
+     * @brief ParquetHelper holds the inputs from the user, the file stream objects, function for setting the schema, and functions 
+     * for opening parquet files.
+     */
+    class ParquetHelper
+    {
+        public:
+            /**
+             * @brief Simple constructor that stores the inputs from the user.
+             * 
+             * @param option The read or write option.
+             * 
+             * @param location The location to read a parquet file.
+             * 
+             * @param destination The destination to write a parquet file.
+             * 
+             * @param rowsize The max row group size when reading parquet files.
+             */
+            ParquetHelper(const char * option, const char * location, const char * destination, int rowsize)
+                : p_option(option), p_location(location), p_destination(destination), maxRowSize(rowsize)
+            {
+            }
+
+            /**
+             * @brief Adds a new field to the schema for writing a parquet file.
+             * 
+             * @param name Name of the field to be written.
+             * @param repetition Repetition setting of the field.
+             * @param type Data type of the field.
+             * @param ctype Converted Data Type of the field.
+             */
+            void addField(const char *name, enum parquet::Repetition::type repetition, parquet::Type::type type, enum parquet::ConvertedType::type ctype, int length)
+            {
+                fields.push_back(parquet::schema::PrimitiveNode::Make(name, repetition, type, ctype, length));
+            }
+
+            /**
+             * @brief Get the Schema object 
+             * 
+             * @return std::shared_ptr<parquet::schema::GroupNode> Shared_ptr of schema object for building the write stream.
+             */
+            std::shared_ptr<parquet::schema::GroupNode> getSchema()
+            {
+                return std::static_pointer_cast<parquet::schema::GroupNode>(
+                    parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, fields));
+            }
+
+            /**
+             * @brief Opens the write stream with the schema and destination.
+             * 
+             */
+            void openWriteFile()
+            {
+                PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
+
+                parquet::WriterProperties::Builder builder;
+
+                std::shared_ptr<parquet::StreamWriter> os(new parquet::StreamWriter(parquet::ParquetFileWriter::Open(outfile, getSchema(), builder.build())));
+
+                os->SetMaxRowGroupSize(maxRowSize);
+
+                parquet_write = os;
+            }
+
+            /**
+             * @brief Opens the read stream with the schema and location.
+             * 
+             */
+            void openReadFile()
+            {
+                PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
+
+                std::shared_ptr<parquet::StreamReader> is(new parquet::StreamReader(parquet::ParquetFileReader::Open(infile)));
+
+                parquet_read = is;
+            }
+
+            /**
+             * @brief Returns a pointer to the stream writer for writing to the destination.
+             * 
+             * @return std::shared_ptr<parquet::StreamWriter> 
+             */
+            std::shared_ptr<parquet::StreamWriter> write()
+            {
+                return parquet_write;
+            }
+
+            /**
+             * @brief Returns a pointer to the stream reader for reading from the location.
+             * 
+             * @return std::shared_ptr<parquet::StreamReader> 
+             */
+            std::shared_ptr<parquet::StreamReader> read()
+            {
+                return parquet_read;
+            }
+
+        private:
+            int maxRowSize;                                                     //! The maximum size of each parquet row group.
+            const char * p_option;                                              //! Read, r, Write, w, option for specifying parquet operation.
+            const char * p_location;                                            //! Location to read parquet file from.
+            const char * p_destination;                                         //! Destination to write parquet file to.
+            parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
+            std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
+            std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
+            std::shared_ptr<parquet::StreamReader> parquet_read = nullptr;      //! Input stream for reading from parquet files.
+            std::shared_ptr<arrow::io::ReadableFile> infile = nullptr;          //! Shared pointer to ReadableFile object.
+    };
+
+    /**
      * @brief Builds ECL Records from Parquet result rows.
      *
      */
@@ -291,115 +400,6 @@ namespace parquetembed
     protected:
         Owned<IRowStream> input;
         std::shared_ptr<ParquetHelper> d_parquet;       //! Helper object for keeping track of read and write options, schema, and file names.
-    };
-
-    /**
-     * @brief ParquetHelper holds the inputs from the user, the file stream objects, function for setting the schema, and functions 
-     * for opening parquet files.
-     */
-    class ParquetHelper
-    {
-        public:
-            /**
-             * @brief Simple constructor that stores the inputs from the user.
-             * 
-             * @param option The read or write option.
-             * 
-             * @param location The location to read a parquet file.
-             * 
-             * @param destination The destination to write a parquet file.
-             * 
-             * @param rowsize The max row group size when reading parquet files.
-             */
-            ParquetHelper(const char * option, const char * location, const char * destination, int rowsize)
-                : p_option(option), p_location(location), p_destination(destination), maxRowSize(rowsize)
-            {
-            }
-
-            /**
-             * @brief Adds a new field to the schema for writing a parquet file.
-             * 
-             * @param name Name of the field to be written.
-             * @param repetition Repetition setting of the field.
-             * @param type Data type of the field.
-             * @param ctype Converted Data Type of the field.
-             */
-            void addField(const char *name, enum parquet::Repetition::type repetition, parquet::Type::type type, enum parquet::ConvertedType::type ctype)
-            {
-                fields.push_back(parquet::schema::PrimitiveNode::Make(name, repetition, type, ctype));
-            }
-
-            /**
-             * @brief Get the Schema object 
-             * 
-             * @return std::shared_ptr<parquet::schema::GroupNode> Shared_ptr of schema object for building the write stream.
-             */
-            std::shared_ptr<parquet::schema::GroupNode> getSchema()
-            {
-                return std::static_pointer_cast<parquet::schema::GroupNode>(
-                    parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, fields));
-            }
-
-            /**
-             * @brief Opens the write stream with the schema and destination.
-             * 
-             */
-            void openWriteFile()
-            {
-                PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
-
-                parquet::WriterProperties::Builder builder;
-
-                std::shared_ptr<parquet::StreamWriter> os(new parquet::StreamWriter(parquet::ParquetFileWriter::Open(outfile, getSchema(), builder.build())));
-
-                os->SetMaxRowGroupSize(maxRowSize);
-
-                parquet_write = os;
-            }
-
-            /**
-             * @brief Opens the read stream with the schema and location.
-             * 
-             */
-            void openReadFile()
-            {
-                PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
-
-                std::shared_ptr<parquet::StreamReader> is(new parquet::StreamReader(parquet::ParquetFileReader::Open(infile)));
-
-                parquet_read = is;
-            }
-
-            /**
-             * @brief Returns a pointer to the stream writer for writing to the destination.
-             * 
-             * @return std::shared_ptr<parquet::StreamWriter> 
-             */
-            std::shared_ptr<parquet::StreamWriter> write()
-            {
-                return parquet_write;
-            }
-
-            /**
-             * @brief Returns a pointer to the stream reader for reading from the location.
-             * 
-             * @return std::shared_ptr<parquet::StreamReader> 
-             */
-            std::shared_ptr<parquet::StreamReader> read()
-            {
-                return parquet_read;
-            }
-
-        private:
-            int maxRowSize;                                                     //! The maximum size of each parquet row group.
-            const char * p_option;                                              //! Read, r, Write, w, option for specifying parquet operation.
-            const char * p_location;                                            //! Location to read parquet file from.
-            const char * p_destination;                                         //! Destination to write parquet file to.
-            parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
-            std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
-            std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
-            std::shared_ptr<parquet::StreamReader> parquet_read = nullptr;      //! Input stream for reading from parquet files.
-            std::shared_ptr<arrow::io::ReadableFile> infile = nullptr;          //! Shared pointer to ReadableFile object.
     };
 
     /**

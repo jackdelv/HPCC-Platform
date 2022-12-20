@@ -103,19 +103,40 @@ namespace parquetembed
         rtlFail(0, msg.str());
     }
 
-    ParquetRowStream::ParquetRowStream(IEngineRowAllocator* _resultAllocator)
+    ParquetRowStream::ParquetRowStream(IEngineRowAllocator* _resultAllocator, std::shared_ptr<ParquetHelper> _parquet)
+        : m_resultAllocator(_resultAllocator)
     {
-        // TODO
+        s_parquet = _parquet;
+        m_currentRow = 0;
+        m_shouldRead = true;
     }
+    
     ParquetRowStream::~ParquetRowStream()
     {
-        // TODO
     }
+
     const void* ParquetRowStream::nextRow()
     {
-        // TODO
+        if (m_shouldRead && m_currentRow < m_Rows.length())
+        {
+            auto json = m_Rows.item(m_currentRow++);
+            Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json,ipt_caseInsensitive);
+            if (contentTree)
+            {
+                CouchbaseRowBuilder cbRowBuilder(contentTree);
+                RtlDynamicRowBuilder rowBuilder(m_resultAllocator);
+                const RtlTypeInfo *typeInfo = m_resultAllocator->queryOutputMeta()->queryTypeInfo();
+                assertex(typeInfo);
+                RtlFieldStrInfo dummyField("<row>", NULL, typeInfo);
+                size32_t len = typeInfo->build(rowBuilder, 0, &dummyField, cbRowBuilder);
+                return rowBuilder.finalizeRowClear(len);
+            }
+            else
+                failx("Error processing result row");
+        }
         return nullptr;
     }
+
     void ParquetRowStream::stop()
     {
         // TODO
@@ -705,25 +726,29 @@ namespace parquetembed
 
     IRowStream * ParquetEmbedFunctionContext::getDatasetResult(IEngineRowAllocator * _resultAllocator)
     {
-        // TO DO    
-        return nullptr;
+        Owned<ParquetRowStream> parquetRowStream;
+        parquetRowStream.setown(new ParquetRowStream(_resultAllocator, m_parquet));
+        return parquetRowStream.getLink();
     }
 
     byte * ParquetEmbedFunctionContext::getRowResult(IEngineRowAllocator * _resultAllocator)
     {
-        // TO DO
-        return nullptr;    
+        Owned<ParquetRowStream> parquetRowStream;
+        parquetRowStream.setown(new ParquetRowStream(_resultAllocator, m_parquet));
+        return (byte *)parquetRowStream->nextRow();  
     }
 
     size32_t ParquetEmbedFunctionContext::getTransformResult(ARowBuilder & rowBuilder)
     {
-        // TO DO  
-        return 0;  
+        UNIMPLEMENTED_X("Parquet Transform Result");
+        return 0;
     }
 
     void ParquetEmbedFunctionContext::bindRowParam(const char *name, IOutputMetaData & metaVal, const byte *val)
     {
-        // TO DO    
+        ParquetRecordBinder binder(logctx, metaVal.queryTypeInfo(), m_nextParam, m_parquet);
+        binder.processRow(val);
+        m_nextParam += binder.numFields();    
     }
 
     void ParquetEmbedFunctionContext::bindDatasetParam(const char *name, IOutputMetaData & metaVal, IRowStream * val)

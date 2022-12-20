@@ -246,62 +246,256 @@ namespace parquetembed
         return count;
     }
 
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param len Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindStringParam(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << std::string(value, len);
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context. 
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindBoolParam(bool value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << value;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param len Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context. 
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindDataParam(unsigned len, const void *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        size32_t bytes;
+        rtlDataAttr data;
+        rtlStrToDataX(bytes, data.refdata(), len, value);
+
+        *r_parquet->write() << std::string(data.getstr(), bytes);
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context. 
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindIntParam(__int64 value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        int64_t val = value;
+        *r_parquet->write() << val;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindUIntParam(unsigned __int64 value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        uint64_t val = value;
+        *r_parquet->write() << val;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindRealParam(double value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << value;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param chars Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindUnicodeParam(unsigned chars, const UChar *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        size32_t utf8chars;
+        char *utf8;
+        rtlUnicodeToUtf8X(utf8chars, utf8, chars, value);
+        *r_parquet->write() << utf8;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value Decimal value represented as a string.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindDecimalParam(std::string value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << value;
+    }
+
+    /**
+     * @brief Calls the typeInfo member function process to write an ECL row to parquet.
+     * 
+     * @param row Pointer to ECL row.
+     */
     void ParquetRecordBinder::processRow(const byte *row)
     {
-        // TO DO
+        thisParam = firstParam;
+        typeInfo->process(row, row, &dummyField, *this);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param len Number of chars in value.
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processString(unsigned len, const char *value, const RtlFieldInfo * field)
     {
-        // TO DO
+        checkNextParam(field);
+        bindStringParam(len, value, field, r_parquet);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processBool(bool value, const RtlFieldInfo * field)
     {
-        // TO DO
+        bindBoolParam(value, field, r_parquet);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param len Number of chars in value.
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processData(unsigned len, const void *value, const RtlFieldInfo * field)
     {
-        // TO DO
+        bindDataParam(len, value, field, r_parquet);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processInt(__int64 value, const RtlFieldInfo * field)
     {
-        // TO DO
+        bindIntParam(value, field, r_parquet);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processUInt(unsigned __int64 value, const RtlFieldInfo * field)
     {
-        // TO DO
+        bindUIntParam(value, field, r_parquet);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processReal(double value, const RtlFieldInfo * field)
     {
-        // TO DO
+        bindRealParam(value, field, r_parquet);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param value Data to be written to the parquet file.
+     * @param digits Number of digits in decimal.
+     * @param precision Number of digits of precision.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processDecimal(const void *value, unsigned digits, unsigned precision, const RtlFieldInfo * field)
     {
-        // TO DO
+        Decimal val;
+        size32_t bytes;
+        rtlDataAttr decText;
+        val.setDecimal(digits, precision, value);
+        val.getStringX(bytes, decText.refstr());
+        bindDecimalParam(decText.getstr(), field, r_parquet);
     }
 
-
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param chars Number of chars in the value.
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processUnicode(unsigned chars, const UChar *value, const RtlFieldInfo * field)
     {
-        // TO DO
+        bindUnicodeParam(chars, value, field, r_parquet);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param len Length of QString
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processQString(unsigned len, const char *value, const RtlFieldInfo * field)
     {
-        // TO DO
+        size32_t charCount;
+        rtlDataAttr text;
+        rtlQStrToStrX(charCount, text.refstr(), len, value);
+        processUtf8(charCount, text.getstr(), field);
     }
 
+    /**
+     * @brief Calls the bind function for the data type of the value.
+     * 
+     * @param chars Number of chars in the value.
+     * @param value Data to be written to the parquet file.
+     * @param field Object with information about the current field.
+     */
     void ParquetRecordBinder::processUtf8(unsigned chars, const char *value, const RtlFieldInfo * field)
     {
-        // TO DO
+        bindStringParam(strlen(value), value, field, r_parquet);
     }
 
+    /**
+     * @brief Gets all the field types from the RtlTypeInfo object and adds them to the schema.
+     * 
+     * @param typeInfo Object holding meta information about the record.
+     */
     void ParquetDatasetBinder::getFieldTypes(const RtlTypeInfo *typeInfo)
     {
         const RtlFieldInfo * const *fields = typeInfo->queryFields();
@@ -363,11 +557,11 @@ namespace parquetembed
                     } 
                     break;
                 case type_real:
-                    type = parquet::Type::FLOAT;
+                    type = parquet::Type::DOUBLE;
                     ctype = parquet::ConvertedType::NONE;
                     break;
                 case type_decimal:
-                    type = parquet::Type::FLOAT;
+                    type = parquet::Type::BYTE_ARRAY;
                     ctype = parquet::ConvertedType::DECIMAL;
                     break;
                 case type_string:

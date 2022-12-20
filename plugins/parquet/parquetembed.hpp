@@ -134,8 +134,11 @@ namespace parquetembed
              * @param rowsize The max row group size when reading parquet files.
              */
             ParquetHelper(const char * option, const char * location, const char * destination, int rowsize)
-                : p_option(option), p_location(location), p_destination(destination), maxRowSize(rowsize)
             {
+                p_option = option;
+                p_location = location;
+                p_destination = destination;
+                maxRowSize = rowsize;
             }
 
             /**
@@ -212,11 +215,21 @@ namespace parquetembed
                 return parquet_read;
             }
 
+            /**
+             * @brief Returns the maximum size of the row group set by the user. Default is 1000.
+             * 
+             * @return int Maximum size of the row group.
+             */
+            int maxRoWSize()
+            {
+                return maxRowSize;
+            }
+
         private:
             int maxRowSize;                                                     //! The maximum size of each parquet row group.
-            const char * p_option;                                              //! Read, r, Write, w, option for specifying parquet operation.
-            const char * p_location;                                            //! Location to read parquet file from.
-            const char * p_destination;                                         //! Destination to write parquet file to.
+            std::string p_option;                                              //! Read, r, Write, w, option for specifying parquet operation.
+            std::string p_location;                                            //! Location to read parquet file from.
+            std::string p_destination;                                         //! Destination to write parquet file to.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
@@ -294,9 +307,10 @@ namespace parquetembed
     class ParquetRecordBinder : public CInterfaceOf<IFieldProcessor>
     {
     public:
-        ParquetRecordBinder(const IContextLogger &_logctx, const RtlTypeInfo *_typeInfo, int _firstParam)
+        ParquetRecordBinder(const IContextLogger &_logctx, const RtlTypeInfo *_typeInfo, int _firstParam, std::shared_ptr<ParquetHelper> _parquet)
             : logctx(_logctx), typeInfo(_typeInfo), firstParam(_firstParam), dummyField("<row>", NULL, typeInfo), thisParam(_firstParam)
         {
+            r_parquet = _parquet;
         }
 
         int numFields();
@@ -350,6 +364,8 @@ namespace parquetembed
         RtlFieldStrInfo dummyField;
         int thisParam;
         TokenSerializer m_tokenSerializer;
+
+        std::shared_ptr<ParquetHelper> r_parquet;
     };
 
     /**
@@ -369,9 +385,11 @@ namespace parquetembed
          * @param _firstParam Index of the first param.
          */
         ParquetDatasetBinder(const IContextLogger &_logctx, IRowStream * _input, const RtlTypeInfo *_typeInfo, std::shared_ptr<ParquetHelper> _parquet, int _firstParam)
-            : input(_input), ParquetRecordBinder(_logctx, _typeInfo, _firstParam)
+            : input(_input), ParquetRecordBinder(_logctx, _typeInfo, _firstParam, _parquet)
         {
             d_parquet = _parquet;
+
+            getFieldTypes(_typeInfo);
         }
         void getFieldTypes(const RtlTypeInfo *typeInfo);
 
@@ -395,6 +413,21 @@ namespace parquetembed
          */
         void executeAll()
         {
+            d_parquet->openWriteFile();
+
+            for(int i = 1; bindNext(); i++)
+            {
+                // After all the fields have been written end the row
+                *d_parquet->write() << parquet::EndRow;
+                
+                if (i % d_parquet->maxRoWSize() == 0) 
+                {
+                    // At the end of each row group send EndRowGroup.
+                    // If EndRowGroup is not explicitly passed in then the 
+                    // groups are created automatically.
+                    *d_parquet->write() << parquet::EndRowGroup;
+                }
+            }   
         }
 
     protected:

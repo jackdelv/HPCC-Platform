@@ -316,83 +316,84 @@ namespace parquetembed
         const RtlFieldInfo * const *fields = typeInfo->queryFields();
         assertex(fields);
         while (*fields){
-            const char * name = fields->name;
+            const char * name = (*fields)->name;
             enum parquet::Type::type type;
             enum parquet::ConvertedType::type ctype;
-            int length = -1;
-            switch(fields->type->getType())
+            int wlength = -1;  // Writing length that gets passed to schema
+            unsigned len = (*fields)->type->length;
+            switch((*fields)->type->getType())
             {
                 case type_boolean:
-                    type = BOOLEAN;
-                    ctype = NONE;
+                    type = parquet::Type::BOOLEAN;
+                    ctype = parquet::ConvertedType::NONE;
                     break;
                 case type_int:
-                    if(fields->type->length > 4)
+                    if(len > 4)
                     {
-                        type = INT64;
-                        ctype = INT_64;
+                        type = parquet::Type::INT64;
+                        ctype = parquet::ConvertedType::INT_64;
                     }
-                    else if(fields->type->length > 2)
+                    else if(len > 2)
                     {
-                        type = INT32;
-                        ctype = INT_32;
+                        type = parquet::Type::INT32;
+                        ctype = parquet::ConvertedType::INT_32;
                     }
-                    else if(fields->type->length > 1)
+                    else if(len > 1)
                     {
-                        type = INT32;
-                        ctype = INT_16;
+                        type = parquet::Type::INT32;
+                        ctype = parquet::ConvertedType::INT_16;
                     }
                     else
                     {
-                        type = INT32;
-                        ctype = INT_8;
+                        type = parquet::Type::INT32;
+                        ctype = parquet::ConvertedType::INT_8;
                     } 
                     break;
                 case type_unsigned:
-                    if(fields->type->length > 4)
+                    if(len > 4)
                     {
-                        type = INT64;
-                        ctype = UINT_64;
+                        type = parquet::Type::INT64;
+                        ctype = parquet::ConvertedType::UINT_64;
                     }
-                    else if(fields->type->length > 2)
+                    else if(len > 2)
                     {
-                        type = INT32;
-                        ctype = UINT_32;
+                        type = parquet::Type::INT32;
+                        ctype = parquet::ConvertedType::UINT_32;
                     }
-                    else if(fields->type->length > 1)
+                    else if(len > 1)
                     {
-                        type = INT32;
-                        ctype = UINT_16;
+                        type = parquet::Type::INT32;
+                        ctype = parquet::ConvertedType::UINT_16;
                     }
                     else
                     {
-                        type = INT32;
-                        ctype = UINT_8;
+                        type = parquet::Type::INT32;
+                        ctype = parquet::ConvertedType::UINT_8;
                     } 
                     break;
                 case type_real:
-                    type = FLOAT;
-                    ctype = NONE;
+                    type = parquet::Type::FLOAT;
+                    ctype = parquet::ConvertedType::NONE;
                     break;
                 case type_decimal:
-                    type = FLOAT;
-                    ctype = DECIMAL;
+                    type = parquet::Type::FLOAT;
+                    ctype = parquet::ConvertedType::DECIMAL;
                     break;
                 case type_string:
-                    type = BYTE_ARRAY;
-                    ctype = UTF8;
+                    type = parquet::Type::BYTE_ARRAY;
+                    ctype = parquet::ConvertedType::UTF8;
                     break;
                 case type_char:
-                    type = FIXED_LEN_BYTE_ARRAY;
-                    ctype = NONE;
-                    length = fields->type->length;
+                    type = parquet::Type::FIXED_LEN_BYTE_ARRAY;
+                    ctype = parquet::ConvertedType::NONE;
+                    wlength = (*fields)->type->length;
                     break;
                 case type_record:
                     
                     break;
                 case type_varstring:
-                    type = BYTE_ARRAY;
-                    ctype = UTF8;
+                    type = parquet::Type::BYTE_ARRAY;
+                    ctype = parquet::ConvertedType::UTF8;
                     break;
                 case type_set:
                     
@@ -401,20 +402,20 @@ namespace parquetembed
                     
                     break;
                 case type_qstring:
-                    type = BYTE_ARRAY;
-                    ctype = UTF8;
+                    type = parquet::Type::BYTE_ARRAY;
+                    ctype = parquet::ConvertedType::UTF8;
                     break;
                 case type_unicode:
                     UNSUPPORTED("UNICODE datatype");
                     break;
                 case type_utf8:
-                    type = BYTE_ARRAY;
-                    ctype = UTF8;
+                    type = parquet::Type::BYTE_ARRAY;
+                    ctype = parquet::ConvertedType::UTF8;
                     break;
                 default:
-                    failx("Datatype %i is not compatible with this plugin.", fields->type->getType());
+                    failx("Datatype %i is not compatible with this plugin.", (*fields)->type->getType());
             }
-            d_parquet->addField(name, REQUIRED, type, ctype, length);
+            d_parquet->addField(name, parquet::Repetition::REQUIRED, type, ctype, wlength);
             fields++;
         }
     }

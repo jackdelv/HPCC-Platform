@@ -126,23 +126,29 @@ namespace parquetembed
 
     const void* ParquetRowStream::nextRow()
     {
-        if (m_shouldRead && m_currentRow < m_Rows.length())
-        {
-            auto json = m_Rows.item(m_currentRow++);
-            Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json,ipt_caseInsensitive);
-            if (contentTree)
-            {
-                CouchbaseRowBuilder cbRowBuilder(contentTree);
-                RtlDynamicRowBuilder rowBuilder(m_resultAllocator);
-                const RtlTypeInfo *typeInfo = m_resultAllocator->queryOutputMeta()->queryTypeInfo();
-                assertex(typeInfo);
-                RtlFieldStrInfo dummyField("<row>", NULL, typeInfo);
-                size32_t len = typeInfo->build(rowBuilder, 0, &dummyField, cbRowBuilder);
-                return rowBuilder.finalizeRowClear(len);
-            }
-            else
-                failx("Error processing result row");
-        }
+        s_parquet->openReadFile();
+
+        std::shared_ptr<arrow::Table> parquet_table = s_parquet->read();
+
+        std::string table = parquet_table->ToString();
+        
+        // if (m_shouldRead && m_currentRow < m_Rows.length())
+        // {
+        //     auto json = m_Rows.item(m_currentRow++);
+        //     Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json,ipt_caseInsensitive);
+        //     if (contentTree)
+        //     {
+        //         ParquetRowBuilder pRowBuilder(contentTree);
+        //         RtlDynamicRowBuilder rowBuilder(m_resultAllocator);
+        //         const RtlTypeInfo *typeInfo = m_resultAllocator->queryOutputMeta()->queryTypeInfo();
+        //         assertex(typeInfo);
+        //         RtlFieldStrInfo dummyField("<row>", NULL, typeInfo);
+        //         size32_t len = typeInfo->build(rowBuilder, 0, &dummyField, pRowBuilder);
+        //         return rowBuilder.finalizeRowClear(len);
+        //     }
+        //     else
+        //         failx("Error processing result row");
+        // }
         return nullptr;
     }
 

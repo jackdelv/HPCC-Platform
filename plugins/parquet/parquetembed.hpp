@@ -33,6 +33,8 @@
 #include "rapidjson/writer.h"
 #include "rapidjson/document.h"
 
+#include "rapidjson/document.h"
+
 // Platform includes
 #include "hqlplugins.hpp"
 #include "eclrtl_imp.hpp"
@@ -720,6 +722,38 @@ namespace parquetembed
             int maxRoWSize()
             {
                 return maxRowSize;
+            }
+
+            // Convert a single batch of Arrow data into Documents
+            arrow::Result<std::vector<rapidjson::Document>> ConvertToVector(std::shared_ptr<arrow::RecordBatch> batch) 
+            {
+                RowBatchBuilder builder{batch->num_rows()};
+
+            for (int i = 0; i < batch->num_columns(); ++i) 
+            {
+                builder.SetField(batch->schema()->field(i).get());
+                ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*batch->column(i).get(), &builder));
+            }
+
+            return std::move(builder).Rows();
+            }
+
+            arrow::Iterator<rapidjson::Document> ConvertToIterator(std::shared_ptr<arrow::Table> table, size_t batch_size)
+            {
+                // Use TableBatchReader to divide table into smaller batches. The batches
+                // created are zero-copy slices with *at most* `batch_size` rows.
+                auto batch_reader = std::make_shared<arrow::TableBatchReader>(*table);
+                batch_reader->set_chunksize(batch_size);
+
+                auto read_batch = [this](const std::shared_ptr<arrow::RecordBatch>& batch)->arrow::Result<arrow::Iterator<rapidjson::Document>>
+                {
+                    ARROW_ASSIGN_OR_RAISE(auto rows, ConvertToVector(batch));
+                    return arrow::MakeVectorIterator(std::move(rows));
+                };
+
+                auto nested_iter = arrow::MakeMaybeMapIterator(read_batch, arrow::MakeIteratorFromReader(std::move(batch_reader)));
+
+                return arrow::MakeFlattenIterator(std::move(nested_iter));
             }
 
         private:

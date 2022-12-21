@@ -15,11 +15,6 @@ DATASET(simpleRec) read_rec() := EMBED(parquet: option('read'), location('/home/
 ENDEMBED;
 
 SEQUENTIAL(
-<<<<<<< HEAD
     write_rec(simpleDataset),
     OUTPUT(read_rec(), NAMED('SIMPLE_PARQUET_IO'))
-=======
-    write_int(simpleDataset),
-    OUTPUT(read_int(), NAMED('SIMPLE_PARQUET_IO'))
->>>>>>> Added dataset to argument of write function to test writing ECL datasets.
 );

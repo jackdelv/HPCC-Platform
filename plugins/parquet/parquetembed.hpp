@@ -21,6 +21,8 @@
 #endif
 
 #include "arrow/io/file.h"
+#include "arrow/table.h"
+#include "parquet/arrow/reader.h"
 #include "parquet/exception.h"
 #include "parquet/stream_reader.h"
 #include "parquet/stream_writer.h"
@@ -190,9 +192,7 @@ namespace parquetembed
             {
                 PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
 
-                std::shared_ptr<parquet::StreamReader> is(new parquet::StreamReader(parquet::ParquetFileReader::Open(infile)));
-
-                parquet_read = is;
+                PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
             }
 
             /**
@@ -206,13 +206,15 @@ namespace parquetembed
             }
 
             /**
-             * @brief Returns a pointer to the stream reader for reading from the location.
+             * @brief Returns a pointer to the FileReader for reading from the location.
              * 
-             * @return std::shared_ptr<parquet::StreamReader> 
+             * @return std::shared_ptr<parquet::FileReader> 
              */
-            std::shared_ptr<parquet::StreamReader> read()
+            std::shared_ptr<arrow::Table> read()
             {
-                return parquet_read;
+                std::shared_ptr<arrow::Table> parquet_table;
+                PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&parquet_table));
+                return parquet_table;
             }
 
             /**
@@ -233,7 +235,7 @@ namespace parquetembed
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
-            std::shared_ptr<parquet::StreamReader> parquet_read = nullptr;      //! Input stream for reading from parquet files.
+            std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr;      //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::io::ReadableFile> infile = nullptr;          //! Shared pointer to ReadableFile object.
     };
 
@@ -255,6 +257,7 @@ namespace parquetembed
         Linked<IEngineRowAllocator> m_resultAllocator;  //!< Pointer to allocator used when building result rows.
         bool m_shouldRead;                              //!< If true, we should continue trying to read more messages.
         __int64 m_currentRow;                           //!< Current result row.
+        std::shared_ptr<ParquetHelper> s_parquet;       // Shared pointer to ParquetHelper class for the stream class.
     };
 
     /**

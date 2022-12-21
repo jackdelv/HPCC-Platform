@@ -20,12 +20,15 @@
 #define PARQUETEMBED_PLUGIN_API DECL_IMPORT
 #endif
 
+#include "arrow/api.h"
 #include "arrow/io/file.h"
-#include "arrow/table.h"
+
 #include "parquet/arrow/reader.h"
 #include "parquet/exception.h"
 #include "parquet/stream_reader.h"
 #include "parquet/stream_writer.h"
+
+#include "rapidjson/document.h"
 
 // Platform includes
 #include "hqlplugins.hpp"
@@ -115,6 +118,142 @@ namespace parquetembed
             : nodeName(other.nodeName), nodeType(other.nodeType), currentChildIndex(other.currentChildIndex), childCount(other.childCount), childrenProcessed(other.childrenProcessed)
         {
         }
+    };
+
+    class RowBatchBuilder
+    {
+    public:
+        explicit RowBatchBuilder(int64_t num_rows) : field_(nullptr)
+        {
+            // Reserve all of the space required up-front to avoid unnecessary resizing
+            rows_.reserve(num_rows);
+
+            for (int64_t i = 0; i < num_rows; ++i)
+            {
+                rows_.push_back(rapidjson::Document());
+                rows_[i].SetObject();
+            }
+        }
+
+        // Set which field to convert.
+        void SetField(const arrow::Field *field) { field_ = field; }
+
+        // Retrieve converted rows from builder.
+        std::vector<rapidjson::Document> Rows() && { return std::move(rows_); }
+
+        // Default implementation
+        arrow::Status Visit(const arrow::Array &array)
+        {
+            return arrow::Status::NotImplemented("Can not convert to json document for array of type ", array.type()->ToString());
+        }
+
+        // Handles booleans, integers, floats
+        template <typename ArrayType, typename DataClass = typename ArrayType::TypeClass>
+        arrow::enable_if_primitive_ctype<DataClass, arrow::Status> Visit(const ArrayType &array)
+        {
+            assert(static_cast<int64_t>(rows_.size()) == array.length());
+            for (int64_t i = 0; i < array.length(); ++i)
+            {
+                if (!array.IsNull(i))
+                {
+                    // rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
+                    // rows_[i].AddMember(str_key, array.Value(i), rows_[i].GetAllocator());
+                }
+            }
+            return arrow::Status::OK();
+        }
+
+        // arrow::Status Visit(const arrow::StringArray &array)
+        // {
+        //     assert(static_cast<int64_t>(rows_.size()) == array.length());
+        //     for (int64_t i = 0; i < array.length(); ++i)
+        //     {
+        //         if (!array.IsNull(i))
+        //         {
+        //             rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
+        //             std::string_view value_view = array.Value(i);
+        //             rapidjson::Value value;
+        //             value.SetString(value_view.data(), static_cast<rapidjson::SizeType>(value_view.size()), rows_[i].GetAllocator());
+        //             rows_[i].AddMember(str_key, value, rows_[i].GetAllocator());
+        //         }
+        //     }
+        //     return arrow::Status::OK();
+        // }
+
+        // arrow::Status Visit(const arrow::StructArray &array)
+        // {
+        //     const arrow::StructType *type = array.struct_type();
+
+        //     assert(static_cast<int64_t>(rows_.size()) == array.length());
+
+        //     RowBatchBuilder child_builder(rows_.size());
+        //     for (int i = 0; i < type->num_fields(); ++i)
+        //     {
+        //         const arrow::Field *child_field = type->field(i).get();
+        //         child_builder.SetField(child_field);
+        //         ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*array.field(i).get(), &child_builder));
+        //     }
+        //     std::vector<rapidjson::Document> rows = std::move(child_builder).Rows();
+
+        //     for (int64_t i = 0; i < array.length(); ++i)
+        //     {
+        //         if (!array.IsNull(i))
+        //         {
+        //             rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
+        //             // Must copy value to new allocator
+        //             rapidjson::Value row_val;
+        //             row_val.CopyFrom(rows[i], rows_[i].GetAllocator());
+        //             rows_[i].AddMember(str_key, row_val, rows_[i].GetAllocator());
+        //         }
+        //     }
+        //     return arrow::Status::OK();
+        // }
+
+        // arrow::Status Visit(const arrow::ListArray &array)
+        // {
+        //     assert(static_cast<int64_t>(rows_.size()) == array.length());
+        //     // First create rows from values
+        //     std::shared_ptr<arrow::Array> values = array.values();
+        //     RowBatchBuilder child_builder(values->length());
+        //     const arrow::Field *value_field = array.list_type()->value_field().get();
+        //     std::string value_field_name = value_field->name();
+        //     child_builder.SetField(value_field);
+        //     ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*values.get(), &child_builder));
+
+        //     std::vector<rapidjson::Document> rows = std::move(child_builder).Rows();
+
+        //     int64_t values_i = 0;
+        //     for (int64_t i = 0; i < array.length(); ++i)
+        //     {
+        //         if (array.IsNull(i))
+        //             continue;
+
+        //         rapidjson::Document::AllocatorType &allocator = rows_[i].GetAllocator();
+        //         auto array_len = array.value_length(i);
+
+        //         rapidjson::Value value;
+        //         value.SetArray();
+        //         value.Reserve(array_len, allocator);
+
+        //         for (int64_t j = 0; j < array_len; ++j)
+        //         {
+        //             rapidjson::Value row_val;
+        //             // Must copy value to new allocator
+        //             row_val.CopyFrom(rows[values_i][value_field_name], allocator);
+        //             value.PushBack(row_val, allocator);
+        //             ++values_i;
+        //         }
+
+        //         rapidjson::Value str_key(field_->name(), allocator);
+        //         rows_[i].AddMember(str_key, value, allocator);
+        //     }
+
+        //     return arrow::Status::OK();
+        // }
+
+    private:
+        const arrow::Field *field_;
+        std::vector<rapidjson::Document> rows_;
     };
 
     /**
@@ -225,6 +364,38 @@ namespace parquetembed
             int maxRoWSize()
             {
                 return maxRowSize;
+            }
+
+            // Convert a single batch of Arrow data into Documents
+            arrow::Result<std::vector<rapidjson::Document>> ConvertToVector(std::shared_ptr<arrow::RecordBatch> batch) 
+            {
+                RowBatchBuilder builder{batch->num_rows()};
+
+            for (int i = 0; i < batch->num_columns(); ++i) 
+            {
+                builder.SetField(batch->schema()->field(i).get());
+                ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*batch->column(i).get(), &builder));
+            }
+
+            return std::move(builder).Rows();
+            }
+
+            arrow::Iterator<rapidjson::Document> ConvertToIterator(std::shared_ptr<arrow::Table> table, size_t batch_size)
+            {
+                // Use TableBatchReader to divide table into smaller batches. The batches
+                // created are zero-copy slices with *at most* `batch_size` rows.
+                auto batch_reader = std::make_shared<arrow::TableBatchReader>(*table);
+                batch_reader->set_chunksize(batch_size);
+
+                auto read_batch = [this](const std::shared_ptr<arrow::RecordBatch>& batch)->arrow::Result<arrow::Iterator<rapidjson::Document>>
+                {
+                    ARROW_ASSIGN_OR_RAISE(auto rows, ConvertToVector(batch));
+                    return arrow::MakeVectorIterator(std::move(rows));
+                };
+
+                auto nested_iter = arrow::MakeMaybeMapIterator(read_batch, arrow::MakeIteratorFromReader(std::move(batch_reader)));
+
+                return arrow::MakeFlattenIterator(std::move(nested_iter));
             }
 
         private:

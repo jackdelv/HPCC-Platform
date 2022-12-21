@@ -229,13 +229,13 @@ namespace parquetembed
 
         private:
             int maxRowSize;                                                     //! The maximum size of each parquet row group.
-            std::string p_option;                                              //! Read, r, Write, w, option for specifying parquet operation.
-            std::string p_location;                                            //! Location to read parquet file from.
-            std::string p_destination;                                         //! Destination to write parquet file to.
+            std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.
+            std::string p_location;                                             //! Location to read parquet file from.
+            std::string p_destination;                                          //! Destination to write parquet file to.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
-            std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr;      //! Input stream for reading from parquet files.
+            std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::io::ReadableFile> infile = nullptr;          //! Shared pointer to ReadableFile object.
     };
 

@@ -154,115 +154,483 @@ namespace parquetembed
 
     void ParquetRowStream::stop()
     {
-        // TODO
+        m_resultAllocator.clear();
+        m_shouldRead = false;
     }
 
+    /**
+     * @brief Gets a Boolean result for an ECL Row
+     * 
+     * @param field Holds the value of the field.
+     * @return bool Returns the boolean value from the result row. 
+     */
     bool ParquetRowBuilder::getBooleanResult(const RtlFieldInfo *field)
     {
-        // TODO
-        return true;
+        const char * value = nextField(field);
+
+        if (!value || !*value) 
+        {
+            NullFieldProcessor p(field);
+            return p.boolResult;
+        }
+
+        bool mybool;
+        parquetembed::handleDeserializeOutcome(m_tokenDeserializer.deserialize(value, mybool), "bool", value);
+        return mybool;
     }
 
+    /**
+     * @brief Gets a data result from the result row and passes it back to engine through result.
+     * 
+     * @param field Holds the value of the field.
+     * @param len Length of the Data value.
+     * @param result Used for returning the result to the caller.
+     */
     void ParquetRowBuilder::getDataResult(const RtlFieldInfo *field, size32_t &len, void * &result)
     {
-        // TODO
+        const char * value = nextField(field);
+
+        if (!value || !*value) 
+        {
+            NullFieldProcessor p(field);
+            rtlStrToDataX(len, result, p.resultChars, p.stringResult);
+            return;
+        }
+        rtlStrToDataX(len, result, strlen(value), value); // This feels like it may not work to me - will preallocate rather larger than we want
     }
 
+    /**
+     * @brief Gets a real result from the result row.
+     * 
+     * @param field Holds the value of the field.
+     * @return double Double value to return.
+     */
     double ParquetRowBuilder::getRealResult(const RtlFieldInfo *field)
     {
-        // TODO
-        return 1.1;
+        const char * value = nextField(field);
+
+        if (!value || !*value) 
+        {
+            NullFieldProcessor p(field);
+            return p.doubleResult;
+        }
+
+        double mydouble = 0.0;
+        parquetembed::handleDeserializeOutcome(m_tokenDeserializer.deserialize(value, mydouble), "real", value);
+        return mydouble;
     }
 
+    /**
+     * @brief Gets the Signed Integer result from the result row.
+     * 
+     * @param field Holds the value of the field.
+     * @return __int64 Value to return.
+     */
     __int64 ParquetRowBuilder::getSignedResult(const RtlFieldInfo *field)
     {
-        // TODO
-        return 1;
+        const char * value = nextField(field);
+        if (!value || !*value) 
+        {
+            NullFieldProcessor p(field);
+            return p.uintResult;
+        }
+
+        __int64 myint64 = 0;
+        parquetembed::handleDeserializeOutcome(m_tokenDeserializer.deserialize(value, myint64), "signed", value);
+        return myint64;
     }
 
+    /**
+     * @brief Gets the Unsigned Integer result from the result row.
+     * 
+     * @param field Holds the value of the field.
+     * @return unsigned Value to return.
+     */
     unsigned __int64 ParquetRowBuilder::getUnsignedResult(const RtlFieldInfo *field)
     {
-        // TODO
-        return 1;
+        const char * value = nextField(field);
+        if (!value || !*value) 
+        {
+
+            NullFieldProcessor p(field);
+            return p.uintResult;
+        }
+
+        unsigned __int64 myuint64 = 0;
+        parquetembed::handleDeserializeOutcome(m_tokenDeserializer.deserialize(value, myuint64), "unsigned", value);
+        return myuint64;
     }
 
+    /**
+     * @brief Gets a String from the result row.
+     * 
+     * @param field Holds the value of the field.
+     * @param chars Number of chars in the String.
+     * @param result Variable used for returning string back to the caller.
+     */
     void ParquetRowBuilder::getStringResult(const RtlFieldInfo *field, size32_t &chars, char * &result)
     {
-        // TODO
+        const char * value = nextField(field);
+
+        if (!value || !*value) 
+        {
+            NullFieldProcessor p(field);
+            rtlUtf8ToStrX(chars, result, p.resultChars, p.stringResult);
+            return;
+        }
+
+        unsigned numchars = rtlUtf8Length(strlen(value), value);
+        rtlUtf8ToStrX(chars, result, numchars, value);
+        return;
     }
 
+    /**
+     * @brief Gets a UTF8 from the result row.
+     * 
+     * @param field Holds the value of the field.
+     * @param chars Number of chars in the UTF8.
+     * @param result Variable used for returning UTF8 back to the caller.
+     */
     void ParquetRowBuilder::getUTF8Result(const RtlFieldInfo *field, size32_t &chars, char * &result)
     {
-        // TODO
+        const char * value = nextField(field);
+
+        if (!value || !*value) 
+        {
+            NullFieldProcessor p(field);
+            rtlUtf8ToUtf8X(chars, result, p.resultChars, p.stringResult);
+            return;
+        }
+
+        unsigned numchars = rtlUtf8Length(strlen(value), value);
+        rtlUtf8ToUtf8X(chars, result, numchars, value);
+        return;
     }
 
+    /**
+     * @brief Gets a Unicode from the result row.
+     * 
+     * @param field Holds the value of the field.
+     * @param chars Number of chars in the Unicode.
+     * @param result Variable used for returning Unicode back to the caller.
+     */
     void ParquetRowBuilder::getUnicodeResult(const RtlFieldInfo *field, size32_t &chars, UChar * &result)
     {
-        // TODO
+        const char * value = nextField(field);
+
+        if (!value || !*value) 
+        {
+            NullFieldProcessor p(field);
+            rtlUnicodeToUnicodeX(chars, result, p.resultChars, p.unicodeResult);
+            return;
+        }
+
+        unsigned numchars = rtlUtf8Length(strlen(value), value); // MORE - is it a good assumption that it is utf8 ? Depends how the database is configured I think
+        rtlUtf8ToUnicodeX(chars, result, numchars, value);
+        return;
     }
 
+    /**
+     * @brief Gets a decimal from the result row.
+     * 
+     * @param field Holds the value of the field.
+     * @param value Variable used for returning decimal to caller.
+     */
     void ParquetRowBuilder::getDecimalResult(const RtlFieldInfo *field, Decimal &value)
     {
-        // TODO
+        const char * dvalue = nextField(field);
+        if (!dvalue || !*dvalue) 
+        {
+            NullFieldProcessor p(field);
+            value.set(p.decimalResult);
+            return;
+        }
+
+        size32_t chars;
+        rtlDataAttr result;
+        value.setString(strlen(dvalue), dvalue);
+        RtlDecimalTypeInfo *dtype = (RtlDecimalTypeInfo *) field->type;
+        value.setPrecision(dtype->getDecimalDigits(), dtype->getDecimalPrecision());
     }
 
+    /**
+     * @brief Starts a new Set.
+     * 
+     * @param field Field with information about the context of the set.
+     * @param isAll Not Supported.
+     */
     void ParquetRowBuilder::processBeginSet(const RtlFieldInfo * field, bool &isAll)
     {
-        // TODO
+        isAll = false; // ALL not supported
+
+        StringBuffer xpath;
+        xpathOrName(xpath, field);
+
+        if (!xpath.isEmpty()) 
+        {
+            PathTracker newPathNode(xpath, CPNTSet);
+            StringBuffer newXPath;
+
+            constructNewXPath(newXPath, xpath.str());
+
+            newPathNode.childCount = m_oResultRow->getCount(newXPath);
+            m_pathStack.push_back(newPathNode);
+        } 
+        else 
+        {
+            failx("processBeginSet: Field name or xpath missing");
+        }
     }
 
+    /**
+     * @brief Checks if we should process another set.
+     * 
+     * @param field Context information about the set.
+     * @return true If the children that we have process is less than the total child count.
+     * @return false If all the children sets have been processed.
+     */
     bool ParquetRowBuilder::processNextSet(const RtlFieldInfo * field)
     {
-        // TODO
-        return true;
+        return m_pathStack.back().childrenProcessed < m_pathStack.back().childCount;
     }
 
+    /**
+     * @brief Starts a new Dataset.
+     * 
+     * @param field Information about the context of the dataset.
+     */
     void ParquetRowBuilder::processBeginDataset(const RtlFieldInfo * field)
     {
-        // TODO
+        StringBuffer xpath;
+        xpathOrName(xpath, field);
+
+        if (!xpath.isEmpty()) 
+        {
+            PathTracker newPathNode(xpath, CPNTDataset);
+            StringBuffer newXPath;
+
+            constructNewXPath(newXPath, xpath.str());
+
+            newPathNode.childCount = m_oResultRow->getCount(newXPath);
+            m_pathStack.push_back(newPathNode);
+        } 
+        else 
+        {
+            failx("processBeginDataset: Field name or xpath missing");
+        }
     }
 
+    /**
+     * @brief Starts a new Row.
+     * 
+     * @param field Information about the context of the row.
+     */
     void ParquetRowBuilder::processBeginRow(const RtlFieldInfo * field)
     {
-        // TODO
+        StringBuffer xpath;
+        xpathOrName(xpath, field);
+
+        if (!xpath.isEmpty()) 
+        {
+            if (strncmp(xpath.str(), "<nested row>", 12) == 0) 
+            {
+                // Row within child dataset
+                if (m_pathStack.back().nodeType == CPNTDataset) 
+                {
+                    m_pathStack.back().currentChildIndex++;
+                } 
+                else 
+                {
+                    failx("<nested row> received with no outer dataset designated");
+                }
+            } 
+            else 
+            {
+                m_pathStack.push_back(PathTracker(xpath, CPNTScalar));
+            }
+        } 
+        else 
+        {
+            failx("processBeginRow: Field name or xpath missing");
+        }
     }
 
+    /**
+     * @brief Checks whether we should process the next row.
+     * 
+     * @param field Information about the context of the row.
+     * @return true If the number of child rows process is less than the total count of children.
+     * @return false If all of the child rows have been processed.
+     */
     bool ParquetRowBuilder::processNextRow(const RtlFieldInfo * field)
     {
-        // TODO
-        return true;
+        return m_pathStack.back().childrenProcessed < m_pathStack.back().childCount;
     }
 
+    /**
+     * @brief Ends a set.
+     * 
+     * @param field Information about the context of the set.
+     */
     void ParquetRowBuilder::processEndSet(const RtlFieldInfo * field)
     {
-        // TODO
+        StringBuffer xpath;
+        xpathOrName(xpath, field);
+
+        if (!xpath.isEmpty() && !m_pathStack.empty() && strcmp(xpath.str(), m_pathStack.back().nodeName.str()) == 0) 
+        {
+            m_pathStack.pop_back();
+        }
     }
 
+    /**
+     * @brief Ends a dataset.
+     * 
+     * @param field Information about the context of the dataset.
+     */
     void ParquetRowBuilder::processEndDataset(const RtlFieldInfo * field)
     {
-        // TODO
+        StringBuffer xpath;
+        xpathOrName(xpath, field);
+
+        if (!xpath.isEmpty()) 
+        {
+            if (!m_pathStack.empty() && strcmp(xpath.str(), m_pathStack.back().nodeName.str()) == 0) 
+            {
+                m_pathStack.pop_back();
+            }
+        } 
+        else 
+        {
+            failx("processEndDataset: Field name or xpath missing");
+        }
     }
 
+    /**
+     * @brief Ends a row.
+     * 
+     * @param field Information about the context of the row.
+     */
     void ParquetRowBuilder::processEndRow(const RtlFieldInfo * field)
     {
-        // TODO
+        StringBuffer xpath;
+        xpathOrName(xpath, field);
+
+        if (!xpath.isEmpty()) 
+        {
+            if (!m_pathStack.empty()) 
+            {
+                if (m_pathStack.back().nodeType == CPNTDataset) 
+                {
+                    m_pathStack.back().childrenProcessed++;
+                } 
+                else if (strcmp(xpath.str(), m_pathStack.back().nodeName.str()) == 0) 
+                {
+                    m_pathStack.pop_back();
+                }
+            }
+        } 
+        else 
+        {
+            failx("processEndRow: Field name or xpath missing");
+        }
     }    
 
-
+    /**
+     * @brief Gets the next field and processes it.
+     * 
+     * @param field Information about the context of the next field.
+     * @return const char* Result of building field.
+     */
     const char * ParquetRowBuilder::nextField(const RtlFieldInfo * field)
     {
-        // TO DO
-        return nullptr;
+        StringBuffer xpath;
+        xpathOrName(xpath, field);
+
+        if (xpath.isEmpty()) 
+        {
+            failx("nextField: Field name or xpath missing");
+        }
+        StringBuffer fullXPath;
+
+        if (!m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet && strncmp(xpath.str(), "<set element>", 13) == 0) 
+        {
+            m_pathStack.back().currentChildIndex++;
+            constructNewXPath(fullXPath, NULL);
+            m_pathStack.back().childrenProcessed++;
+        } 
+        else 
+        {
+            constructNewXPath(fullXPath, xpath.str());
+        }
+
+        return m_oResultRow->queryProp(fullXPath.str());
     }
 
     void ParquetRowBuilder::xpathOrName(StringBuffer & outXPath, const RtlFieldInfo * field) const
     {
-        // TO DO
+        outXPath.clear();
+
+        if (field->xpath) 
+        {
+            if (field->xpath[0] == xpathCompoundSeparatorChar) 
+            {
+                outXPath.append(field->xpath + 1);
+            } 
+            else 
+            {
+                const char * sep = strchr(field->xpath, xpathCompoundSeparatorChar);
+
+                if (!sep) 
+                {
+                    outXPath.append(field->xpath);
+                } 
+                else 
+                {
+                    outXPath.append(field->xpath, 0, static_cast<size32_t>(sep - field->xpath));
+                }
+            }
+        } 
+        else 
+        {
+            outXPath.append(field->name);
+        }
     }
 
     void ParquetRowBuilder::constructNewXPath(StringBuffer& outXPath, const char * nextNode) const
     {
-        // TO DO
+        bool nextNodeIsFromRoot = (nextNode && *nextNode == '/');
+
+        outXPath.clear();
+
+        if (!nextNodeIsFromRoot) 
+        {
+            // Build up full parent xpath using our previous components
+            for (std::vector<PathTracker>::const_iterator iter = m_pathStack.begin(); iter != m_pathStack.end(); iter++) 
+            {
+                if (strncmp(iter->nodeName, "<row>", 5) != 0) 
+                {
+                    if (!outXPath.isEmpty()) 
+                    {
+                        outXPath.append("/");
+                    }
+                    outXPath.append(iter->nodeName);
+                    if (iter->nodeType == CPNTDataset || iter->nodeType == CPNTSet) 
+                    {
+                        outXPath.appendf("[%d]", iter->currentChildIndex);
+                    }
+                }
+            }
+        }
+
+        if (nextNode && *nextNode) 
+        {
+            if (!outXPath.isEmpty()) 
+            {
+                outXPath.append("/");
+            }
+            outXPath.append(nextNode);
+        }
     }
 
     unsigned ParquetRecordBinder::checkNextParam(const RtlFieldInfo * field)

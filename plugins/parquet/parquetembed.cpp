@@ -13,6 +13,11 @@
 
 #include "parquetembed.hpp"
 
+#include "arrow/result.h"
+
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+
 // #include <map>
 // #include <mutex>
 // #include <thread>
@@ -26,7 +31,7 @@
 // #include "jthread.hpp"
 #include "rtlembed.hpp"
 // #include "jptree.hpp"
-// #include "rtlds_imp.hpp"
+#include "rtlds_imp.hpp"
 // #include <time.h>
 // #include <vector>
 
@@ -117,29 +122,29 @@ namespace parquetembed
 
     const void* ParquetRowStream::nextRow()
     {
-        s_parquet->openReadFile();
+        arrow::Result<rapidjson::Document> row = s_parquet->next();
+        if (m_shouldRead && row.ok())
+        {
+            rapidjson::Document doc = std::move(row).ValueUnsafe();
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            doc.Accept(writer);
 
-        std::shared_ptr<arrow::Table> parquet_table = s_parquet->read();
-
-        std::string table = parquet_table->ToString();
-        
-        // if (m_shouldRead && m_currentRow < m_Rows.length())
-        // {
-        //     auto json = m_Rows.item(m_currentRow++);
-        //     Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json,ipt_caseInsensitive);
-        //     if (contentTree)
-        //     {
-        //         ParquetRowBuilder pRowBuilder(contentTree);
-        //         RtlDynamicRowBuilder rowBuilder(m_resultAllocator);
-        //         const RtlTypeInfo *typeInfo = m_resultAllocator->queryOutputMeta()->queryTypeInfo();
-        //         assertex(typeInfo);
-        //         RtlFieldStrInfo dummyField("<row>", NULL, typeInfo);
-        //         size32_t len = typeInfo->build(rowBuilder, 0, &dummyField, pRowBuilder);
-        //         return rowBuilder.finalizeRowClear(len);
-        //     }
-        //     else
-        //         failx("Error processing result row");
-        // }
+            auto json = buffer.GetString();
+            Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json, ipt_caseInsensitive);
+            if (contentTree)
+            {
+                ParquetRowBuilder pRowBuilder(contentTree);
+                RtlDynamicRowBuilder rowBuilder(m_resultAllocator);
+                const RtlTypeInfo *typeInfo = m_resultAllocator->queryOutputMeta()->queryTypeInfo();
+                assertex(typeInfo);
+                RtlFieldStrInfo dummyField("<row>", NULL, typeInfo);
+                size32_t len = typeInfo->build(rowBuilder, 0, &dummyField, pRowBuilder);
+                return rowBuilder.finalizeRowClear(len);
+            }
+            else
+                failx("Error processing result row");
+        }
         return nullptr;
     }
 
@@ -1014,7 +1019,8 @@ namespace parquetembed
         const char *option = ""; // Read(r), Write(w)
         const char *location = ""; // file name and location of where to write parquet file
         const char *destination = ""; // file name and location of where to read parquet file from
-        int rowsize = 1000;
+        int rowsize = 1000; // Size of the row groups when writing to parquet files
+        int batchSize = 100; // Size of the batches when converting parquet columns to rows
         // Iterate through user options and save them
         StringArray inputOptions;
         inputOptions.appendList(options, ",");
@@ -1034,11 +1040,13 @@ namespace parquetembed
                     destination = val;
                 else if (stricmp(optName, "MaxRowSize") == 0)
                     rowsize = atoi(val);
+                else if (stricmp(optName, "BatchSize") == 0)
+                    batchSize = atoi(val);
                 else
                     failx("Unknown option %s", optName.str());
             }
         }
-        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, rowsize));
+        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, rowsize, batchSize));
         m_parquet = ptr;
     }
 
@@ -1231,7 +1239,18 @@ namespace parquetembed
             m_oInputStream->executeAll();
         else
         {
-            // TODO
+            if(m_parquet->options() == 'w')
+            {
+
+            }
+            else if(m_parquet->options() == 'r')
+            {
+                m_parquet->openReadFile();
+
+                m_parquet->read();
+
+                m_parquet->setIterator();
+            }
         }
     }
 

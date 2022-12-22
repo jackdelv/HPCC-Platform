@@ -17,6 +17,11 @@
 #include "parquet/arrow/schema.h"
 
 
+#include "arrow/result.h"
+
+#include "rapidjson/writer.h"
+#include "rapidjson/stringbuffer.h"
+
 // #include <map>
 // #include <mutex>
 // #include <thread>
@@ -126,29 +131,29 @@ namespace parquetembed
 
     const void* ParquetRowStream::nextRow()
     {
-        s_parquet->openReadFile();
+        arrow::Result<rapidjson::Document> row = s_parquet->next();
+        if (m_shouldRead && row.ok())
+        {
+            rapidjson::Document doc = std::move(row).ValueUnsafe();
+            rapidjson::StringBuffer buffer;
+            rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);
+            doc.Accept(writer);
 
-        std::shared_ptr<arrow::Table> parquet_table = s_parquet->read();
-
-        std::string table = parquet_table->ToString();
-        
-        // if (m_shouldRead && m_currentRow < m_Rows.length())
-        // {
-        //     auto json = m_Rows.item(m_currentRow++);
-        //     Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json,ipt_caseInsensitive);
-        //     if (contentTree)
-        //     {
-        //         ParquetRowBuilder pRowBuilder(contentTree);
-        //         RtlDynamicRowBuilder rowBuilder(m_resultAllocator);
-        //         const RtlTypeInfo *typeInfo = m_resultAllocator->queryOutputMeta()->queryTypeInfo();
-        //         assertex(typeInfo);
-        //         RtlFieldStrInfo dummyField("<row>", NULL, typeInfo);
-        //         size32_t len = typeInfo->build(rowBuilder, 0, &dummyField, pRowBuilder);
-        //         return rowBuilder.finalizeRowClear(len);
-        //     }
-        //     else
-        //         failx("Error processing result row");
-        // }
+            auto json = buffer.GetString();
+            Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json, ipt_caseInsensitive);
+            if (contentTree)
+            {
+                ParquetRowBuilder pRowBuilder(contentTree);
+                RtlDynamicRowBuilder rowBuilder(m_resultAllocator);
+                const RtlTypeInfo *typeInfo = m_resultAllocator->queryOutputMeta()->queryTypeInfo();
+                assertex(typeInfo);
+                RtlFieldStrInfo dummyField("<row>", NULL, typeInfo);
+                size32_t len = typeInfo->build(rowBuilder, 0, &dummyField, pRowBuilder);
+                return rowBuilder.finalizeRowClear(len);
+            }
+            else
+                failx("Error processing result row");
+        }
         return nullptr;
     }
 
@@ -2775,7 +2780,18 @@ namespace parquetembed
             m_oInputStream->executeAll();
         else
         {
-            // TODO
+            if(m_parquet->options() == 'w')
+            {
+
+            }
+            else if(m_parquet->options() == 'r')
+            {
+                m_parquet->openReadFile();
+
+                m_parquet->read();
+
+                m_parquet->setIterator();
+            }
         }
     }
 

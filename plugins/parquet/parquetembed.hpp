@@ -20,6 +20,8 @@
 #define PARQUETEMBED_PLUGIN_API DECL_IMPORT
 #endif
 
+#define RAPIDJSON_HAS_STDSTRING 1
+
 #include "arrow/api.h"
 #include "arrow/io/file.h"
 
@@ -156,100 +158,100 @@ namespace parquetembed
             {
                 if (!array.IsNull(i))
                 {
-                    // rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
-                    // rows_[i].AddMember(str_key, array.Value(i), rows_[i].GetAllocator());
+                    rapidjson::GenericValue<rapidjson::UTF8<>> str_key(field_->name(), rows_[i].GetAllocator());
+                    rows_[i].AddMember(str_key, array.Value(i), rows_[i].GetAllocator());
                 }
             }
             return arrow::Status::OK();
         }
 
-        // arrow::Status Visit(const arrow::StringArray &array)
-        // {
-        //     assert(static_cast<int64_t>(rows_.size()) == array.length());
-        //     for (int64_t i = 0; i < array.length(); ++i)
-        //     {
-        //         if (!array.IsNull(i))
-        //         {
-        //             rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
-        //             std::string_view value_view = array.Value(i);
-        //             rapidjson::Value value;
-        //             value.SetString(value_view.data(), static_cast<rapidjson::SizeType>(value_view.size()), rows_[i].GetAllocator());
-        //             rows_[i].AddMember(str_key, value, rows_[i].GetAllocator());
-        //         }
-        //     }
-        //     return arrow::Status::OK();
-        // }
+        arrow::Status Visit(const arrow::StringArray &array)
+        {
+            assert(static_cast<int64_t>(rows_.size()) == array.length());
+            for (int64_t i = 0; i < array.length(); ++i)
+            {
+                if (!array.IsNull(i))
+                {
+                    rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
+                    std::string_view value_view = array.Value(i);
+                    rapidjson::Value value;
+                    value.SetString(value_view.data(), static_cast<rapidjson::SizeType>(value_view.size()), rows_[i].GetAllocator());
+                    rows_[i].AddMember(str_key, value, rows_[i].GetAllocator());
+                }
+            }
+            return arrow::Status::OK();
+        }
 
-        // arrow::Status Visit(const arrow::StructArray &array)
-        // {
-        //     const arrow::StructType *type = array.struct_type();
+        arrow::Status Visit(const arrow::StructArray &array)
+        {
+            const arrow::StructType *type = array.struct_type();
 
-        //     assert(static_cast<int64_t>(rows_.size()) == array.length());
+            assert(static_cast<int64_t>(rows_.size()) == array.length());
 
-        //     RowBatchBuilder child_builder(rows_.size());
-        //     for (int i = 0; i < type->num_fields(); ++i)
-        //     {
-        //         const arrow::Field *child_field = type->field(i).get();
-        //         child_builder.SetField(child_field);
-        //         ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*array.field(i).get(), &child_builder));
-        //     }
-        //     std::vector<rapidjson::Document> rows = std::move(child_builder).Rows();
+            RowBatchBuilder child_builder(rows_.size());
+            for (int i = 0; i < type->num_fields(); ++i)
+            {
+                const arrow::Field *child_field = type->field(i).get();
+                child_builder.SetField(child_field);
+                ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*array.field(i).get(), &child_builder));
+            }
+            std::vector<rapidjson::Document> rows = std::move(child_builder).Rows();
 
-        //     for (int64_t i = 0; i < array.length(); ++i)
-        //     {
-        //         if (!array.IsNull(i))
-        //         {
-        //             rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
-        //             // Must copy value to new allocator
-        //             rapidjson::Value row_val;
-        //             row_val.CopyFrom(rows[i], rows_[i].GetAllocator());
-        //             rows_[i].AddMember(str_key, row_val, rows_[i].GetAllocator());
-        //         }
-        //     }
-        //     return arrow::Status::OK();
-        // }
+            for (int64_t i = 0; i < array.length(); ++i)
+            {
+                if (!array.IsNull(i))
+                {
+                    rapidjson::Value str_key(field_->name(), rows_[i].GetAllocator());
+                    // Must copy value to new allocator
+                    rapidjson::Value row_val;
+                    row_val.CopyFrom(rows[i], rows_[i].GetAllocator());
+                    rows_[i].AddMember(str_key, row_val, rows_[i].GetAllocator());
+                }
+            }
+            return arrow::Status::OK();
+        }
 
-        // arrow::Status Visit(const arrow::ListArray &array)
-        // {
-        //     assert(static_cast<int64_t>(rows_.size()) == array.length());
-        //     // First create rows from values
-        //     std::shared_ptr<arrow::Array> values = array.values();
-        //     RowBatchBuilder child_builder(values->length());
-        //     const arrow::Field *value_field = array.list_type()->value_field().get();
-        //     std::string value_field_name = value_field->name();
-        //     child_builder.SetField(value_field);
-        //     ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*values.get(), &child_builder));
+        arrow::Status Visit(const arrow::ListArray &array)
+        {
+            assert(static_cast<int64_t>(rows_.size()) == array.length());
+            // First create rows from values
+            std::shared_ptr<arrow::Array> values = array.values();
+            RowBatchBuilder child_builder(values->length());
+            const arrow::Field *value_field = array.list_type()->value_field().get();
+            std::string value_field_name = value_field->name();
+            child_builder.SetField(value_field);
+            ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*values.get(), &child_builder));
 
-        //     std::vector<rapidjson::Document> rows = std::move(child_builder).Rows();
+            std::vector<rapidjson::Document> rows = std::move(child_builder).Rows();
 
-        //     int64_t values_i = 0;
-        //     for (int64_t i = 0; i < array.length(); ++i)
-        //     {
-        //         if (array.IsNull(i))
-        //             continue;
+            int64_t values_i = 0;
+            for (int64_t i = 0; i < array.length(); ++i)
+            {
+                if (array.IsNull(i))
+                    continue;
 
-        //         rapidjson::Document::AllocatorType &allocator = rows_[i].GetAllocator();
-        //         auto array_len = array.value_length(i);
+                rapidjson::Document::AllocatorType &allocator = rows_[i].GetAllocator();
+                auto array_len = array.value_length(i);
 
-        //         rapidjson::Value value;
-        //         value.SetArray();
-        //         value.Reserve(array_len, allocator);
+                rapidjson::Value value;
+                value.SetArray();
+                value.Reserve(array_len, allocator);
 
-        //         for (int64_t j = 0; j < array_len; ++j)
-        //         {
-        //             rapidjson::Value row_val;
-        //             // Must copy value to new allocator
-        //             row_val.CopyFrom(rows[values_i][value_field_name], allocator);
-        //             value.PushBack(row_val, allocator);
-        //             ++values_i;
-        //         }
+                for (int64_t j = 0; j < array_len; ++j)
+                {
+                    rapidjson::Value row_val;
+                    // Must copy value to new allocator
+                    row_val.CopyFrom(rows[values_i][value_field_name], allocator);
+                    value.PushBack(row_val, allocator);
+                    ++values_i;
+                }
 
-        //         rapidjson::Value str_key(field_->name(), allocator);
-        //         rows_[i].AddMember(str_key, value, allocator);
-        //     }
+                rapidjson::Value str_key(field_->name(), allocator);
+                rows_[i].AddMember(str_key, value, allocator);
+            }
 
-        //     return arrow::Status::OK();
-        // }
+            return arrow::Status::OK();
+        }
 
     private:
         const arrow::Field *field_;

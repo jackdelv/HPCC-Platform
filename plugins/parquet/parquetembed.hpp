@@ -31,6 +31,7 @@
 #include "parquet/stream_writer.h"
 
 #include "rapidjson/document.h"
+#include "rapidjson/stringbuffer.h"
 
 // Platform includes
 #include "hqlplugins.hpp"
@@ -275,13 +276,16 @@ namespace parquetembed
              * @param destination The destination to write a parquet file.
              * 
              * @param rowsize The max row group size when reading parquet files.
+             * 
+             * @param batchSize The size of the batches when converting parquet columns to rows.
              */
-            ParquetHelper(const char * option, const char * location, const char * destination, int rowsize)
+            ParquetHelper(const char * option, const char * location, const char * destination, int rowsize, int _batchSize)
             {
                 p_option = option;
                 p_location = location;
                 p_destination = destination;
                 maxRowSize = rowsize;
+                batchSize = _batchSize;
             }
 
             /**
@@ -347,15 +351,14 @@ namespace parquetembed
             }
 
             /**
-             * @brief Returns a pointer to the FileReader for reading from the location.
-             * 
-             * @return std::shared_ptr<parquet::FileReader> 
+             * @brief Sets the parquet_table member to the output of reading from the given
+             * parquet file.
              */
-            std::shared_ptr<arrow::Table> read()
+            void read()
             {
-                std::shared_ptr<arrow::Table> parquet_table;
-                PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&parquet_table));
-                return parquet_table;
+                std::shared_ptr<arrow::Table> out;
+                PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
+                parquet_table = out;
             }
 
             /**
@@ -366,6 +369,18 @@ namespace parquetembed
             int maxRoWSize()
             {
                 return maxRowSize;
+            }
+
+            char options()
+            {
+                if (p_option[0] == 'W' || p_option[0] == 'w')
+                {
+                    return 'w';
+                } 
+                else if (p_option[0] == 'R' || p_option[0] == 'r')
+                {
+                    return 'r';
+                }
             }
 
             // Convert a single batch of Arrow data into Documents
@@ -400,8 +415,20 @@ namespace parquetembed
                 return arrow::MakeFlattenIterator(std::move(nested_iter));
             }
 
+            void setIterator()
+            {
+                output = ConvertToIterator(parquet_table, batchSize);
+            }
+
+            arrow::Result<rapidjson::Document> next()
+            {
+                return output.Next();
+            }
+
         private:
             int maxRowSize;                                                     //! The maximum size of each parquet row group.
+            size_t batchSize;                                                   //! BatchSize for converting Parquet Columns to ECL rows. It is more efficient to break
+                                                                                //  the data into small batches for converting to rows than to convert all at once. 
             std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.
             std::string p_location;                                             //! Location to read parquet file from.
             std::string p_destination;                                          //! Destination to write parquet file to.
@@ -409,7 +436,9 @@ namespace parquetembed
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
             std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
+            std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.
             std::shared_ptr<arrow::io::ReadableFile> infile = nullptr;          //! Shared pointer to ReadableFile object.
+            arrow::Iterator<rapidjson::Document> output;              //! Arrow iterator to rows read from parquet file.
     };
 
     /**

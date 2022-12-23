@@ -358,6 +358,7 @@ namespace parquetembed
             {
                 std::shared_ptr<arrow::Table> out;
                 PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
+                numRows = out->num_rows();
                 parquet_table = out;
             }
 
@@ -425,10 +426,15 @@ namespace parquetembed
                 return output.Next();
             }
 
+            int64_t num_rows()
+            {
+                return numRows;
+            }
+
         private:
             int maxRowSize;                                                     //! The maximum size of each parquet row group.
-            size_t batchSize;                                                   //! BatchSize for converting Parquet Columns to ECL rows. It is more efficient to break
-                                                                                //  the data into small batches for converting to rows than to convert all at once. 
+            size_t batchSize;                                                   //! BatchSize for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
+            int64_t numRows;                                                    //! The number of result rows that are read from the parquet file. 
             std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.
             std::string p_location;                                             //! Location to read parquet file from.
             std::string p_destination;                                          //! Destination to write parquet file to.
@@ -456,10 +462,11 @@ namespace parquetembed
         virtual void stop();
 
     private:
-        Linked<IEngineRowAllocator> m_resultAllocator;  //!< Pointer to allocator used when building result rows.
-        bool m_shouldRead;                              //!< If true, we should continue trying to read more messages.
-        __int64 m_currentRow;                           //!< Current result row.
-        std::shared_ptr<ParquetHelper> s_parquet;       // Shared pointer to ParquetHelper class for the stream class.
+        Linked<IEngineRowAllocator> m_resultAllocator;  //! Pointer to allocator used when building result rows.
+        bool m_shouldRead;                              //! If true, we should continue trying to read more messages.
+        __int64 m_currentRow;                           //! Current result row.
+        int64_t numRows;                                //! Number of result rows read from parquet file.
+        std::shared_ptr<ParquetHelper> s_parquet;       //! Shared pointer to ParquetHelper class for the stream class.
     };
 
     /**

@@ -14,7 +14,7 @@ airbnbRec := RECORD
     INTEGER beds;
 END;
 
-dataset(airbnbRec) getAll() := EMBED(mongodb : user('hpccuser'), password('hpcc1'), server('cluster0.qbvdaak.mongodb.net'), database('sample_airbnb'),  collection('listingsAndReviews'))
+dataset(airbnbRec) getAll() := EMBED(mongodb : user('user'), password(''), server('cluster0.qbvdaak.mongodb.net'), database('sample_airbnb'),  collection('listingsAndReviews'))
     find({});
 ENDEMBED; 
 

@@ -123,6 +123,7 @@ namespace parquetembed
         s_parquet = _parquet;
         m_currentRow = 0;
         m_shouldRead = true;
+        numRows = _parquet->num_rows();
     }
     
     ParquetRowStream::~ParquetRowStream()
@@ -132,7 +133,7 @@ namespace parquetembed
     const void* ParquetRowStream::nextRow()
     {
         arrow::Result<rapidjson::Document> row = s_parquet->next();
-        if (m_shouldRead && row.ok())
+        if (m_shouldRead && m_currentRow < numRows)
         {
             rapidjson::Document doc = std::move(row).ValueUnsafe();
             rapidjson::StringBuffer buffer;
@@ -140,7 +141,9 @@ namespace parquetembed
             doc.Accept(writer);
 
             auto json = buffer.GetString();
-            Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json, ipt_caseInsensitive);
+             Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json, ipt_caseInsensitive);
+            m_currentRow++;
+
             if (contentTree)
             {
                 ParquetRowBuilder pRowBuilder(contentTree);
@@ -897,7 +900,7 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processUtf8(unsigned chars, const char *value, const RtlFieldInfo * field)
     {
-        bindStringParam(strlen(value), value, field, r_parquet);
+        bindStringParam(chars, value, field, r_parquet);
     }
 
     /**

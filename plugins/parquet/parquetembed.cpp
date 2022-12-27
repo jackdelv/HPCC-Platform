@@ -666,12 +666,25 @@ namespace parquetembed
      * @param field RtlFieldInfo holds meta information about the embed context.
      * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
      */
-    void bindStringParam(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    void bindUtf8Param(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
     {
         size32_t utf8chars;
         rtlDataAttr utf8;
-        rtlStrToUtf8X(utf8chars, utf8.refstr(), len, value);
+        rtlUtf8ToUtf8X(utf8chars, utf8.refstr(), len, value);
         *r_parquet->write() << std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata()));
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param len Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindStringParam(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << std::string(value, len);
     }
 
     /**
@@ -754,7 +767,7 @@ namespace parquetembed
         size32_t utf8chars;
         char *utf8;
         rtlUnicodeToUtf8X(utf8chars, utf8, chars, value);
-        *r_parquet->write() << std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata()));
+        *r_parquet->write() << utf8;
     }
 
     /**
@@ -903,7 +916,7 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processUtf8(unsigned chars, const char *value, const RtlFieldInfo * field)
     {
-        bindStringParam(chars, value, field, r_parquet);
+        bindUtf8Param(chars, value, field, r_parquet);
     }
 
     /**

@@ -132,7 +132,7 @@ namespace parquetembed
             doc.Accept(writer);
 
             auto json = buffer.GetString();
-             Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json, ipt_caseInsensitive);
+            Owned<IPropertyTree> contentTree = createPTreeFromJSONString(json, ipt_caseInsensitive);
             m_currentRow++;
 
             if (contentTree)
@@ -659,7 +659,10 @@ namespace parquetembed
      */
     void bindStringParam(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
     {
-        *r_parquet->write() << std::string(value, len);
+        size32_t utf8chars;
+        rtlDataAttr utf8;
+        rtlStrToUtf8X(utf8chars, utf8.refstr(), len, value);
+        *r_parquet->write() << std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata()));
     }
 
     /**
@@ -742,7 +745,7 @@ namespace parquetembed
         size32_t utf8chars;
         char *utf8;
         rtlUnicodeToUtf8X(utf8chars, utf8, chars, value);
-        *r_parquet->write() << utf8;
+        *r_parquet->write() << std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata()));
     }
 
     /**

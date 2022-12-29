@@ -1001,18 +1001,16 @@ namespace parquetembed
                     ctype = parquet::ConvertedType::NONE;
                     wlength = (*fields)->type->length;
                     break;
-                case type_record:
-                    
-                    break;
                 case type_varstring:
                     type = parquet::Type::BYTE_ARRAY;
                     ctype = parquet::ConvertedType::UTF8;
                     break;
                 case type_set:
-                    
+                    // Do something with arrow::ListType
                     break;
+                case type_record:
                 case type_row:
-                    
+                    // Do something with arrow::MapType
                     break;
                 case type_qstring:
                     type = parquet::Type::BYTE_ARRAY;

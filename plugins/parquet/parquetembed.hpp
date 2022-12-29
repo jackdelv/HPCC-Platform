@@ -677,8 +677,10 @@ namespace parquetembed
                 PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
 
                 parquet::WriterProperties::Builder builder;
+                schema = std::static_pointer_cast<parquet::schema::GroupNode>((*fieldInfo)->schema_root());
+                int num = schema->field_count();
 
-                std::shared_ptr<parquet::StreamWriter> os(new parquet::StreamWriter(parquet::ParquetFileWriter::Open(outfile, getSchema(), builder.build())));
+                std::shared_ptr<parquet::StreamWriter> os(new parquet::StreamWriter(parquet::ParquetFileWriter::Open(outfile, schema, builder.build())));
 
                 os->SetMaxRowGroupSize(maxRowSize);
 
@@ -723,7 +725,7 @@ namespace parquetembed
              * 
              * @return int Maximum size of the row group.
              */
-            int maxRoWSize()
+            int getMaxRowSize()
             {
                 return maxRowSize;
             }
@@ -787,6 +789,173 @@ namespace parquetembed
                 return numRows;
             }
 
+            arrow::Status FieldToNode(const std::string& name, const RtlFieldInfo *field, parquet::schema::NodePtr* out) 
+            {
+                enum parquet::Type::type type;
+                enum parquet::ConvertedType::type ctype;
+                parquet::Repetition::type repetition = parquet::Repetition::REQUIRED;
+                int length = -1;
+                unsigned len = field->type->length;
+
+                switch (field->type->getType()) 
+                {   
+                    case type_boolean:
+                        type = parquet::Type::BOOLEAN;
+                        break;
+                    case type_int:
+                        if(len > 4)
+                        {
+                            type = parquet::Type::INT64;
+                            ctype = parquet::ConvertedType::INT_64;
+                        }
+                        else if(len > 2)
+                        {
+                            type = parquet::Type::INT32;
+                            ctype = parquet::ConvertedType::INT_32;
+                        }
+                        else if(len > 1)
+                        {
+                            type = parquet::Type::INT32;
+                            ctype = parquet::ConvertedType::INT_16;
+                        }
+                        else
+                        {
+                            type = parquet::Type::INT32;
+                            ctype = parquet::ConvertedType::INT_8;
+                        } 
+                        break;
+                    case type_unsigned:
+                        if(len > 4)
+                        {
+                            type = parquet::Type::INT64;
+                            ctype = parquet::ConvertedType::UINT_64;
+                        }
+                        else if(len > 2)
+                        {
+                            type = parquet::Type::INT32;
+                            ctype = parquet::ConvertedType::UINT_32;
+                        }
+                        else if(len > 1)
+                        {
+                            type = parquet::Type::INT32;
+                            ctype = parquet::ConvertedType::UINT_16;
+                        }
+                        else
+                        {
+                            type = parquet::Type::INT32;
+                            ctype = parquet::ConvertedType::UINT_8;
+                        } 
+                        break;
+                    case type_real:
+                        type = parquet::Type::DOUBLE;
+                        ctype = parquet::ConvertedType::NONE;
+                        break;
+                    case type_string:
+                        type = parquet::Type::BYTE_ARRAY;
+                        ctype = parquet::ConvertedType::UTF8;
+                        break;
+                    case type_char:
+                        type = parquet::Type::FIXED_LEN_BYTE_ARRAY;
+                        ctype = parquet::ConvertedType::NONE;
+                        length = field->type->length;
+                        break;
+                    case type_varstring:
+                        type = parquet::Type::BYTE_ARRAY;
+                        ctype = parquet::ConvertedType::UTF8;
+                        break;
+                    case type_qstring:
+                        type = parquet::Type::BYTE_ARRAY;
+                        ctype = parquet::ConvertedType::UTF8;
+                        break;
+                    case type_unicode:
+                        UNSUPPORTED("UNICODE datatype");
+                        break;
+                    case type_utf8:
+                        type = parquet::Type::BYTE_ARRAY;
+                        ctype = parquet::ConvertedType::UTF8;
+                        break;
+                    case type_decimal: 
+                        type = parquet::Type::BYTE_ARRAY;
+                        ctype = parquet::ConvertedType::DECIMAL;
+                        break;    
+                    case type_record:      
+                    case type_set:    
+                    case type_row: 
+                        return ListToNode(name, field, out);
+                    default: 
+                        failx("Datatype %i is not compatible with this plugin.", field->type->getType());
+                }
+
+                PARQUET_CATCH_NOT_OK(*out = parquet::schema::PrimitiveNode::Make(name, repetition, type, ctype, length));
+                return arrow::Status::OK();
+            }            
+
+            arrow::Status ListToNode(const std::string& name, const RtlFieldInfo *field, parquet::schema::NodePtr* out) 
+            {
+                return fieldsToNodes(field->type, out);
+            }
+
+            // arrow::Status MapToNode(const std::string& name, const RtlFieldInfo *field, parquet::schema::NodePtr* out) 
+            // {
+            //     const RtlFieldInfo *field = field->type->queryFields();
+            //     parquet::schema::NodePtr key_node;
+            //     RETURN_NOT_OK(FieldToNode("key", ++field, &key_node));
+
+            //     parquet::schema::NodePtr value_node;
+            //     RETURN_NOT_OK(FieldToNode("value", ++field, &value_node));
+
+            //     parquet::schema::NodePtr key_value = parquet::schema::GroupNode::Make("key_value", parquet::Repetition::REPEATED, {key_node, value_node});
+            //     *out = parquet::schema::GroupNode::Make(name, parquet::Repetition::REPEATED, {key_value}, parquet::LogicalType::Map());
+            //     return arrow::Status::OK();
+            // }
+
+            int countFields(const RtlTypeInfo *typeInfo)
+            {
+                const RtlFieldInfo * const *fields = typeInfo->queryFields();
+                int count = 0;
+                assertex(fields);
+                while (*fields++) 
+                    count++;
+
+                return count;
+            }
+
+            arrow::Status fieldsToNodes(const RtlTypeInfo *typeInfo, parquet::schema::NodePtr* out)
+            {
+                const RtlFieldInfo * const *fields = typeInfo->queryFields();
+                int count = countFields(typeInfo);
+
+                std::vector<parquet::schema::NodePtr> nodes(count);
+
+                for (int i = 0; i < count; i++, fields++) 
+                {
+                    RETURN_NOT_OK(FieldToNode((*fields)->name, *fields, &nodes[i]));
+                }
+
+                *out = parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes);
+
+                return arrow::Status::OK();
+            }
+
+            arrow::Status fieldsToSchema(const RtlTypeInfo *typeInfo)
+            {
+                const RtlFieldInfo * const *fields = typeInfo->queryFields();
+                int count = countFields(typeInfo);
+
+                std::vector<parquet::schema::NodePtr> nodes(count);
+
+                for (int i = 0; i < count; i++, fields++) 
+                {
+                    RETURN_NOT_OK(FieldToNode((*fields)->name, *fields, &nodes[i]));
+                }
+
+                parquet::schema::NodePtr schema = parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes);
+                *fieldInfo = std::make_shared<::parquet::SchemaDescriptor>();
+                PARQUET_CATCH_NOT_OK((*fieldInfo)->Init(schema));
+
+                return arrow::Status::OK();
+            }
+
         private:
             int maxRowSize;                                                     //! The maximum size of each parquet row group.
             size_t batchSize;                                                   //! BatchSize for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
@@ -795,12 +964,14 @@ namespace parquetembed
             std::string p_location;                                             //! Location to read parquet file from.
             std::string p_destination;                                          //! Destination to write parquet file to.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
+            std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
+            std::shared_ptr<::parquet::SchemaDescriptor>* fieldInfo;            //! SchemaDescriptor holding field information.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
             std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.
             std::shared_ptr<arrow::io::ReadableFile> infile = nullptr;          //! Shared pointer to ReadableFile object.
-            arrow::Iterator<rapidjson::Document> output;              //! Arrow iterator to rows read from parquet file.
+            arrow::Iterator<rapidjson::Document> output;                        //! Arrow iterator to rows read from parquet file.
     };
 
     /**

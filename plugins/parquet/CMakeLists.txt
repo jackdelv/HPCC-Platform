@@ -36,7 +36,6 @@ if(PARQUETEMBED)
         set(
             SRCS
             parquetembed.cpp
-            parquethelper.cpp
         )
 
         INCLUDE_DIRECTORIES(

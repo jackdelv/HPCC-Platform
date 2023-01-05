@@ -23,9 +23,12 @@
 #define RAPIDJSON_HAS_STDSTRING 1
 
 #include "arrow/api.h"
+#include "arrow/dataset/api.h"
+#include "arrow/filesystem/api.h"
 #include "arrow/io/file.h"
 
 #include "parquet/arrow/reader.h"
+#include "parquet/arrow/schema.h"
 #include "parquet/exception.h"
 #include "parquet/stream_reader.h"
 #include "parquet/stream_writer.h"
@@ -314,10 +317,10 @@ namespace parquetembed
              * 
              * @return std::shared_ptr<parquet::schema::GroupNode> Shared_ptr of schema object for building the write stream.
              */
-            std::shared_ptr<parquet::schema::GroupNode> getSchema()
+            std::shared_ptr<parquet::schema::GroupNode> getSchema(parquet::schema::NodeVector nodes)
             {
                 return std::static_pointer_cast<parquet::schema::GroupNode>(
-                    parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, fields));
+                    parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes));
             }
 
             /**
@@ -329,14 +332,14 @@ namespace parquetembed
                 PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
 
                 parquet::WriterProperties::Builder builder;
-                schema = std::static_pointer_cast<parquet::schema::GroupNode>((*fieldInfo)->schema_root());
-                int num = schema->field_count();
+                // schema = std::static_pointer_cast<parquet::schema::GroupNode>(fieldInfo->schema_root());
+                // auto field1 = schema->field(2);          
 
-                std::shared_ptr<parquet::StreamWriter> os(new parquet::StreamWriter(parquet::ParquetFileWriter::Open(outfile, schema, builder.build())));
+                // std::shared_ptr<parquet::ParquetFileWriter fw = parquet::ParquetFileWriter::Open(outfile, schema, builder.build());
 
-                os->SetMaxRowGroupSize(maxRowSize);
+                // fw->SetMaxRowGroupSize(maxRowSize);
 
-                parquet_write = os;
+                parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
             }
 
             /**
@@ -345,9 +348,36 @@ namespace parquetembed
              */
             void openReadFile()
             {
-                PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
+                if(partition())
+                {
+                    // Create a filesystem
+                    std::shared_ptr<arrow::fs::LocalFileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+                    arrow::fs::FileSelector selector;
+                    selector.base_dir = p_location; // The base directory to be searched is provided by the user in the location option.
+                    selector.recursive = true; // Selector will search the base path recursively for partitioned files.
 
-                PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
+                    // Create a file format
+                    std::shared_ptr<arrow::dataset::ParquetFileFormat> format = std::make_shared<arrow::dataset::ParquetFileFormat>();
+
+                    // Create the partitioning factory.
+                    // TO DO look into other partioning types.
+                    std::shared_ptr<arrow::dataset::PartitioningFactory> partitioning_factory = arrow::dataset::HivePartitioning::MakeFactory();
+
+                    arrow::dataset::FileSystemFactoryOptions options;
+                    options.partitioning = partitioning_factory;
+
+                    // Create the dataset factory
+                    PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::DatasetFactory> dataset_factory, arrow::dataset::FileSystemDatasetFactory::Make(fs, selector, format, options));
+
+                    // Get dataset
+                    PARQUET_ASSIGN_OR_THROW(dataset, dataset_factory->Finish());
+                }
+                else
+                {
+                    PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
+
+                    PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
+                }
             }
 
             /**
@@ -361,15 +391,29 @@ namespace parquetembed
             }
 
             /**
-             * @brief Sets the parquet_table member to the output of reading from the given
+             * @brief Sets the parquet_table member to the output of what is read from the given
              * parquet file.
              */
             void read()
             {
-                std::shared_ptr<arrow::Table> out;
-                PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
-                numRows = out->num_rows();
-                parquet_table = out;
+                if(partition())
+                {
+                    // Create a scanner 
+                    arrow::dataset::ScannerBuilder scanner_builder(dataset);
+                    PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
+
+                    // Scan the dataset
+                    PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::Table> table, scanner->ToTable());
+                    numRows = table->num_rows();
+                    parquet_table = table;
+                }
+                else
+                {
+                    std::shared_ptr<arrow::Table> out;
+                    PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
+                    numRows = out->num_rows();
+                    parquet_table = out;
+                }
             }
 
             /**
@@ -392,6 +436,14 @@ namespace parquetembed
                 {
                     return 'r';
                 }
+            }
+
+            bool partition()
+            {
+                if (p_option[1])
+                    return (p_option[1] == 'M' || p_option[1] == 'm');
+                
+                return false;
             }
 
             // Convert a single batch of Arrow data into Documents
@@ -531,9 +583,10 @@ namespace parquetembed
                         ctype = parquet::ConvertedType::DECIMAL;
                         break;    
                     case type_record:      
-                    case type_set:    
-                    case type_row: 
-                        return ListToNode(name, field, out);
+                    case type_row:
+                        // return rowToNodes(field->name, field->type, out);    
+                    case type_set: 
+                        return listToNodes(field->name, field->type, out);
                     default: 
                         failx("Datatype %i is not compatible with this plugin.", field->type->getType());
                 }
@@ -541,11 +594,6 @@ namespace parquetembed
                 PARQUET_CATCH_NOT_OK(*out = parquet::schema::PrimitiveNode::Make(name, repetition, type, ctype, length));
                 return arrow::Status::OK();
             }            
-
-            arrow::Status ListToNode(const std::string& name, const RtlFieldInfo *field, parquet::schema::NodePtr* out) 
-            {
-                return fieldsToNodes(field->type, out);
-            }
 
             // arrow::Status MapToNode(const std::string& name, const RtlFieldInfo *field, parquet::schema::NodePtr* out) 
             // {
@@ -572,19 +620,40 @@ namespace parquetembed
                 return count;
             }
 
-            arrow::Status fieldsToNodes(const RtlTypeInfo *typeInfo, parquet::schema::NodePtr* out)
+            arrow::Status rowToNodes(const char * name, const RtlTypeInfo *typeInfo, parquet::schema::NodePtr* out)
             {
                 const RtlFieldInfo * const *fields = typeInfo->queryFields();
                 int count = countFields(typeInfo);
 
-                std::vector<parquet::schema::NodePtr> nodes(count);
+                parquet::schema::NodeVector nodes(count);
 
                 for (int i = 0; i < count; i++, fields++) 
                 {
                     RETURN_NOT_OK(FieldToNode((*fields)->name, *fields, &nodes[i]));
                 }
 
-                *out = parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes);
+                auto element = parquet::schema::GroupNode::Make("schema", parquet::Repetition::REPEATED, {nodes});
+
+                *out = parquet::schema::GroupNode::Make(name, parquet::Repetition::OPTIONAL, {element}, parquet::LogicalType::Map());
+
+                return arrow::Status::OK();
+            }
+
+            arrow::Status listToNodes(const char * name, const RtlTypeInfo *typeInfo, parquet::schema::NodePtr* out)
+            {
+                const RtlFieldInfo * const *fields = typeInfo->queryFields();
+                int count = countFields(typeInfo);
+
+                parquet::schema::NodeVector nodes(count);
+
+                for (int i = 0; i < count; i++, fields++) 
+                {
+                    RETURN_NOT_OK(FieldToNode((*fields)->name, *fields, &nodes[i]));
+                }
+
+                auto element = parquet::schema::GroupNode::Make("schema", parquet::Repetition::REPEATED, {nodes});
+
+                *out = parquet::schema::GroupNode::Make(name, parquet::Repetition::OPTIONAL, {element}, parquet::LogicalType::List());
 
                 return arrow::Status::OK();
             }
@@ -601,10 +670,10 @@ namespace parquetembed
                     RETURN_NOT_OK(FieldToNode((*fields)->name, *fields, &nodes[i]));
                 }
 
-                parquet::schema::NodePtr schema = parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes);
-                *fieldInfo = std::make_shared<::parquet::SchemaDescriptor>();
-                PARQUET_CATCH_NOT_OK((*fieldInfo)->Init(schema));
-
+                // parquet::schema::NodePtr schema = parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes);
+                // fieldInfo = std::make_shared<::parquet::SchemaDescriptor>();
+                // PARQUET_CATCH_NOT_OK(fieldInfo->Init(schema));
+                schema = getSchema(nodes);
                 return arrow::Status::OK();
             }
 
@@ -617,8 +686,9 @@ namespace parquetembed
             std::string p_destination;                                          //! Destination to write parquet file to.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
-            std::shared_ptr<::parquet::SchemaDescriptor>* fieldInfo;            //! SchemaDescriptor holding field information.
+            std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
+            std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
             std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.

@@ -13,7 +13,12 @@
                 "sqs"
             ]
         },
-        "arrow",
+        {
+            "name": "arrow",
+            "features": [
+                "dataset"
+            ]
+        },
         "azure-storage-blobs-cpp",
         "azure-storage-files-shares-cpp",
         "boost-property-tree",

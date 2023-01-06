@@ -197,7 +197,6 @@ namespace mongodbembed
          * @param database MongoDB database to connect to.
          * @param collection MongoDB collection to connect to.
          * @param _connectionString Connection string for creating the mongocxx::uri.
-         * @param _queryString Query String for hashing the connection.
          * @param _batchSize The number of documents MongoDB should return per batch.
          */
         MongoDBQuery(const char *database, const char *collection, const char *_connectionString, std::int32_t _batchSize) 

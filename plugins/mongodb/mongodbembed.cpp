@@ -967,8 +967,7 @@ namespace mongodbembed
         std::shared_ptr<MongoDBQuery> ptr(new MongoDBQuery(databaseName, collectionName, connectionString, batchSize));
         query = ptr;
 
-        std::call_once(CONNECTION_CACHE_INIT_FLAG, configure);
-        m_oMDBConnection->instance().create_connection(connectionString.str()); 
+        std::call_once(CONNECTION_CACHE_INIT_FLAG, configure); 
     }
 
     /**
@@ -1822,12 +1821,13 @@ namespace mongodbembed
      */
     void MongoDBEmbedFunctionContext::execute()
     {
+        m_oMDBConnection->instance().create_connection(query->uri(), query->queryStr());
         if (m_oInputStream)
             m_oInputStream->executeAll(m_oMDBConnection);
         else 
         {
             // Get a MongoDB instance from the connection object
-            auto conn = m_oMDBConnection->instance().get_connection(query->uri());
+            auto conn = m_oMDBConnection->instance().get_connection(query->uri(), query->queryStr());
             mongocxx::database db = (*conn)[query->database()];
             mongocxx::collection coll = db[query->collection()];
 

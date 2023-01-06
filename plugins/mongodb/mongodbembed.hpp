@@ -197,6 +197,7 @@ namespace mongodbembed
          * @param database MongoDB database to connect to.
          * @param collection MongoDB collection to connect to.
          * @param _connectionString Connection string for creating the mongocxx::uri.
+         * @param _queryString Query String for hashing the connection.
          * @param _batchSize The number of documents MongoDB should return per batch.
          */
         MongoDBQuery(const char *database, const char *collection, const char *_connectionString, std::int32_t _batchSize) 
@@ -226,6 +227,7 @@ namespace mongodbembed
             embeddedScript = end + 1; // Save embedded script as what is after the parenthesis
             if(embeddedScript.find(";") == std::string::npos) failx("Syntax Error: missing semicolon");
             cursor = embeddedScript.c_str();
+            queryString.append(embeddedScript.c_str());
         }
 
         /**
@@ -309,6 +311,16 @@ namespace mongodbembed
             return connectionString.str();
         }
 
+        /**
+         * @brief Returns the query string for building the key to the hash.
+         * 
+         * @return const char* Query string for hashing.
+         */
+        const char * queryStr()
+        {
+            return queryString.str();
+        }
+
     protected:
         std::string databaseName;                      //! Local copy of database name.
         std::string collectionName;                    //! Local copy of collection name.
@@ -319,6 +331,7 @@ namespace mongodbembed
         StringArray result_rows;                       //! Local copy of result rows.
         std::int32_t batchSize;                        //! Batch Size for result rows.
         StringBuffer connectionString;                 //! Pointer to connection string for hashing and creating the uri.
+        StringBuffer queryString;                      //! Pointer to query string for hashing.
     };
 
     /**
@@ -383,14 +396,17 @@ namespace mongodbembed
          * added to the map of active connections.
          * 
          * @param connectionString The connection string for constructing the client object.
+         * 
+         * @param queryString A const char * holding the query string for hashing.
          */
-        void create_connection(const char *connectionString) 
+        void create_connection(const char *connectionString, const char * queryString) 
         {
             auto client_ptr = std::make_shared<mongocxx::client>(mongocxx::client{mongocxx::uri{connectionString}});
 
             // Use a hash of the connection string as the key to finding
             // any connection objects
-            hash64_t key = rtlHash64VStr(connectionString, 0); 
+            auto hashString = std::string(connectionString) + std::string(queryString);
+            hash64_t key = rtlHash64VStr(hashString.c_str(), 0); 
 
             clientConnections[key] = client_ptr;
         }
@@ -398,14 +414,17 @@ namespace mongodbembed
         /**
          * @brief Acquires a mongocxx client from the connections map.
          * 
-         * @param connectionString A string holding the connection parameters.
+         * @param connectionString A const char * holding the connection parameters.
+         * 
+         * @param queryString A const char * holding the query string for hashing.
          * 
          * @return A shared pointer to the mongocxx:client object for connecting to the database.
          */
-        std::shared_ptr<mongocxx::client> get_connection(const char *connectionString)
+        std::shared_ptr<mongocxx::client> get_connection(const char *connectionString, const char * queryString)
         {
+            auto hashString = std::string(connectionString) + std::string(queryString);
             // Get key for client object
-            hash64_t key = rtlHash64VStr(connectionString, 0);
+            hash64_t key = rtlHash64VStr(hashString.c_str(), 0);
 
             return clientConnections[key];
         }
@@ -572,7 +591,7 @@ namespace mongodbembed
         {
             auto cmd = std::string(query->cmd());
 
-            auto conn = m_oMDBConnection->instance().get_connection(query->uri());
+            auto conn = m_oMDBConnection->instance().get_connection(query->uri(), query->queryStr());
             mongocxx::database db = (*conn)[query->database()];
             mongocxx::collection coll = db[query->collection()];
 

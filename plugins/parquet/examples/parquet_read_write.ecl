@@ -1,5 +1,4 @@
 IMPORT Parquet;
-IMPORT MONGODB;
 
 locationRec := {STRING place, REAL balance};
 simpleRec := RECORD

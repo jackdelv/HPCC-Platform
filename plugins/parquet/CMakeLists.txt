@@ -28,9 +28,8 @@ project(parquetembed)
 if(PARQUETEMBED)
     ADD_PLUGIN(parquetembed)
     if(MAKE_PARQUETEMBED)
-        find_package(Parquet CONFIG REQUIRED)
         find_package(Arrow CONFIG REQUIRED)
-        # find_package(ArrowDataset REQUIRED)
+        find_package(Parquet CONFIG REQUIRED)
 
         set(
             SRCS
@@ -55,38 +54,29 @@ if(PARQUETEMBED)
             DESTINATION plugins
         )
 
-        install(
-            FILES ${LIBPARQUET_LIB_REAL}
-            DESTINATION ${LIB_DIR}
-            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            COMPONENT Runtime)
-
-        install(
-            FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
-            DESTINATION ${LIB_DIR}
-            COMPONENT Runtime)
-            
-        install(
-            FILES ${LIBARROW_LIB_REAL}
-            DESTINATION ${LIB_DIR}
-            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            COMPONENT Runtime)
-
-        install(
-            FILES ${LIBARROW_LIB} ${LIBARROW_LIB_ABI}
-            DESTINATION ${LIB_DIR}
-            COMPONENT Runtime)
-        
         # install(
-        #     FILES ${LIBARROWDATASET_LIB_REAL}
+        #     FILES ${LIBPARQUET_LIB_REAL}
         #     DESTINATION ${LIB_DIR}
         #     PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
         #     COMPONENT Runtime)
-    
+
         # install(
-        #     FILES ${LIBARROWDATASET_LIB} ${LIBARROWDATASET_LIB_ABI}
+        #     FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
         #     DESTINATION ${LIB_DIR}
-        #     COMPONENT Runtime)  
+        #     COMPONENT Runtime)
+            
+        # install(
+        #     FILES ${LIBARROW_LIB_REAL}
+        #     DESTINATION ${LIB_DIR}
+        #     PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        #     COMPONENT Runtime)
+
+        # install(
+        #     FILES ${LIBARROW_LIB} ${LIBARROW_LIB_ABI}
+        #     DESTINATION ${LIB_DIR}
+        #     COMPONENT Runtime)
+
+        find_library(DATASET arrow_dataset ${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib)
 
         target_link_libraries(
             parquetembed
@@ -94,7 +84,7 @@ if(PARQUETEMBED)
             jlib
             Parquet::parquet_shared
             Arrow::arrow_shared
-            # ArrowDataset::arrow_dataset_shared
+            ${DATASET}
         )
     endif()
 endif()

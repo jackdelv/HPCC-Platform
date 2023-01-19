@@ -23,8 +23,8 @@
 #define RAPIDJSON_HAS_STDSTRING 1
 
 #include "arrow/api.h"
-// #include "arrow/dataset/api.h"
-// #include "arrow/filesystem/api.h"
+#include "arrow/dataset/api.h"
+#include "arrow/filesystem/api.h"
 #include "arrow/io/file.h"
 
 #include "parquet/arrow/reader.h"
@@ -348,36 +348,36 @@ namespace parquetembed
              */
             void openReadFile()
             {
-                // if(partition())
-                // {
-                //     // Create a filesystem
-                //     std::shared_ptr<arrow::fs::LocalFileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
-                //     arrow::fs::FileSelector selector;
-                //     selector.base_dir = p_location; // The base directory to be searched is provided by the user in the location option.
-                //     selector.recursive = true; // Selector will search the base path recursively for partitioned files.
+                if(partition())
+                {
+                    // Create a filesystem
+                    std::shared_ptr<arrow::fs::LocalFileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+                    arrow::fs::FileSelector selector;
+                    selector.base_dir = p_location; // The base directory to be searched is provided by the user in the location option.
+                    selector.recursive = true; // Selector will search the base path recursively for partitioned files.
 
-                //     // Create a file format
-                //     std::shared_ptr<arrow::dataset::ParquetFileFormat> format = std::make_shared<arrow::dataset::ParquetFileFormat>();
+                    // Create a file format
+                    std::shared_ptr<arrow::dataset::ParquetFileFormat> format = std::make_shared<arrow::dataset::ParquetFileFormat>();
 
-                //     // Create the partitioning factory.
-                //     // TO DO look into other partioning types.
-                //     std::shared_ptr<arrow::dataset::PartitioningFactory> partitioning_factory = arrow::dataset::HivePartitioning::MakeFactory();
+                    // Create the partitioning factory.
+                    // TO DO look into other partioning types.
+                    std::shared_ptr<arrow::dataset::PartitioningFactory> partitioning_factory = arrow::dataset::HivePartitioning::MakeFactory();
 
-                //     arrow::dataset::FileSystemFactoryOptions options;
-                //     options.partitioning = partitioning_factory;
+                    arrow::dataset::FileSystemFactoryOptions options;
+                    options.partitioning = partitioning_factory;
 
-                //     // Create the dataset factory
-                //     PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::DatasetFactory> dataset_factory, arrow::dataset::FileSystemDatasetFactory::Make(fs, selector, format, options));
+                    // Create the dataset factory
+                    PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::DatasetFactory> dataset_factory, arrow::dataset::FileSystemDatasetFactory::Make(fs, selector, format, options));
 
-                //     // Get dataset
-                //     PARQUET_ASSIGN_OR_THROW(dataset, dataset_factory->Finish());
-                // }
-                // else
-                // {
+                    // Get dataset
+                    PARQUET_ASSIGN_OR_THROW(dataset, dataset_factory->Finish());
+                }
+                else
+                {
                     PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
 
                     PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
-                // }
+                }
             }
 
             /**
@@ -396,24 +396,24 @@ namespace parquetembed
              */
             void read()
             {
-                // if(partition())
-                // {
-                //     // Create a scanner 
-                //     arrow::dataset::ScannerBuilder scanner_builder(dataset);
-                //     PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
+                if(partition())
+                {
+                    // Create a scanner 
+                    arrow::dataset::ScannerBuilder scanner_builder(dataset);
+                    PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
 
-                //     // Scan the dataset
-                //     PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::Table> table, scanner->ToTable());
-                //     numRows = table->num_rows();
-                //     parquet_table = table;
-                // }
-                // else
-                // {
+                    // Scan the dataset
+                    PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::Table> table, scanner->ToTable());
+                    numRows = table->num_rows();
+                    parquet_table = table;
+                }
+                else
+                {
                     std::shared_ptr<arrow::Table> out;
                     PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
                     numRows = out->num_rows();
                     parquet_table = out;
-                // }
+                }
             }
 
             /**
@@ -688,7 +688,7 @@ namespace parquetembed
             std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
             std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
-            // std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
+            std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
             std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.

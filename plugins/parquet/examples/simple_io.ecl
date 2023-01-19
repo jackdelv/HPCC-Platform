@@ -1,12 +1,12 @@
 IMPORT Parquet;
 
-locationRec := {STRING place, REAL balance};
 simpleRec := RECORD
     INTEGER num;
+		REAL balance;
+		UTF8_de lastname;
     STRING name;
 END; 
-simpleDataset := DATASET([{1, 'Jack'}, {2, 'Alex'}, {3, 'Lilly'}, {4, 'Kirsten'}, {5, 'Glenn'}], simpleRec);
-// simpleDataset := DATASET([{1, 'Jack', {'US', 3.14}}, {2, 'Alex', {'BR', 6.92}}, {3, 'Lilly', {'US', 6.81}}, {4, 'Kirsten', {'EU', 9.15}}, {5, 'Glenn', {'EU', 9.15}}], simpleRec);
+simpleDataset := DATASET([{1, 2.4356, U'de\3531', 'Jack'}, {2, 4.8937, U'as\352df', 'John'}, {3, 1.8573, 'nj\351vf', 'Jane'}, {4, 9.1235, U'ds\354fg', 'Jill'}, {5, 6.3297, U'po\355gm', 'Jim'}], simpleRec);
 
 write_rec(dataset(simpleRec) sd) := EMBED(parquet: option('write'), destination('/home/hpccuser/dev/test_data/simple.parquet'))
 ENDEMBED;

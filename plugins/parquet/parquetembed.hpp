@@ -44,6 +44,8 @@
 #include "rtlfield.hpp"
 #include "roxiemem.hpp"
 
+#include <iostream>
+
 namespace parquetembed
 {
     extern void UNSUPPORTED(const char *feature) __attribute__((noreturn));

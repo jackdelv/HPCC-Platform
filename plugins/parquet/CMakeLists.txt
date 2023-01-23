@@ -24,12 +24,15 @@
 #############################################################
 
 project(parquetembed)
+message("CMAKE Version: ${CMAKE_VERSION}")
 
 if(PARQUETEMBED)
     ADD_PLUGIN(parquetembed)
     if(MAKE_PARQUETEMBED)
         find_package(Arrow CONFIG REQUIRED)
         find_package(Parquet CONFIG REQUIRED)
+        find_library(ARROWDATASET arrow_dataset ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib REQUIRED)
+        list(APPEND CMAKE_INSTALL_RPATH ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib)
 
         set(
             SRCS
@@ -76,7 +79,7 @@ if(PARQUETEMBED)
         #     DESTINATION ${LIB_DIR}
         #     COMPONENT Runtime)
 
-        find_library(DATASET arrow_dataset ${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TARGET_TRIPLET}/lib)
+        message("Dataset: ${ARROWDATASET}")
 
         target_link_libraries(
             parquetembed
@@ -84,7 +87,7 @@ if(PARQUETEMBED)
             jlib
             Parquet::parquet_shared
             Arrow::arrow_shared
-            ${DATASET}
+            ${ARROWDATASET}
         )
     endif()
 endif()

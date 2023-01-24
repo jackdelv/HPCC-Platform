@@ -292,13 +292,19 @@ namespace parquetembed
              * 
              * @param batchSize The size of the batches when converting parquet columns to rows.
              */
-            ParquetHelper(const char * option, const char * location, const char * destination, int rowsize, int _batchSize)
+            ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize)
             {
                 p_option = option;
                 p_location = location;
                 p_destination = destination;
+                p_partDir = partDir;
                 maxRowSize = rowsize;
                 batchSize = _batchSize;
+
+                if (option[1])
+                    partition = (option[1] == 'M' || option[1] == 'm');
+                else
+                    partition = false;
             }
 
             /**
@@ -329,19 +335,52 @@ namespace parquetembed
              * @brief Opens the write stream with the schema and destination.
              * 
              */
-            void openWriteFile()
+            arrow::Status openWriteFile()
             {
-                PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
+                if(partition)
+                {
+                    if(p_location == "")
+                        failx("Cannot partition files because the location was not supplied.");
+                    else if(p_partDir == "")
+                        failx("Cannot partition files because the partition directory was not supplied.");
 
-                parquet::WriterProperties::Builder builder;
-                // schema = std::static_pointer_cast<parquet::schema::GroupNode>(fieldInfo->schema_root());
-                // auto field1 = schema->field(2);          
+                    std::string uri = "file://" + p_location;
+                    std::string base_path = p_location + p_partDir;
+                    ARROW_ASSIGN_OR_RAISE(auto filesystem, arrow::fs::FileSystemFromUri(uri));
 
-                // std::shared_ptr<parquet::ParquetFileWriter fw = parquet::ParquetFileWriter::Open(outfile, schema, builder.build());
+                    ARROW_RETURN_NOT_OK(filesystem->CreateDir(base_path));
 
-                // fw->SetMaxRowGroupSize(maxRowSize);
+                    // The partition schema determines which fields are part of the partitioning.
+                    // TODO The schema needs to be user accesible.
+                    auto partition_schema = arrow::schema({arrow::field("part", arrow::utf8())});
 
-                parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
+                    // Hive-style partitioning creates directories with "key=value" pairs.
+                    // TODO need to allow for different partitioning types.
+                    std::shared_ptr<arrow::dataset::HivePartitioning> partitioning = std::make_shared<arrow::dataset::HivePartitioning>(partition_schema);
+
+                    std::shared_ptr<arrow::dataset::ParquetFileFormat> format = std::make_shared<arrow::dataset::ParquetFileFormat>();
+
+                    write_options.file_write_options = format->DefaultWriteOptions();
+                    write_options.filesystem = filesystem;
+                    write_options.base_dir = base_path;
+                    write_options.partitioning = partitioning;
+                    write_options.basename_template = "part{i}.parquet";
+                }
+                else
+                {
+                    PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
+
+                    parquet::WriterProperties::Builder builder;
+                    // schema = std::static_pointer_cast<parquet::schema::GroupNode>(fieldInfo->schema_root());
+                    // auto field1 = schema->field(2);          
+
+                    // std::shared_ptr<parquet::ParquetFileWriter fw = parquet::ParquetFileWriter::Open(outfile, schema, builder.build());
+
+                    // fw->SetMaxRowGroupSize(maxRowSize);
+
+                    parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
+                }
+                return arrow::Status::OK();
             }
 
             /**
@@ -350,7 +389,7 @@ namespace parquetembed
              */
             void openReadFile()
             {
-                if(partition())
+                if(partition)
                 {
                     // Create a filesystem
                     std::shared_ptr<arrow::fs::LocalFileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
@@ -382,6 +421,17 @@ namespace parquetembed
                 }
             }
 
+            arrow::Status writePartition(std::shared_ptr<arrow::Table> table)
+            {
+                // Create dataset for writing partitioned files.
+                std::shared_ptr<arrow::dataset::InMemoryDataset> dataset = std::make_shared<arrow::dataset::InMemoryDataset>(table);
+                ARROW_ASSIGN_OR_RAISE(auto scanner_builder, dataset->NewScan());
+                ARROW_ASSIGN_OR_RAISE(auto scanner, scanner_builder->Finish());
+
+                // Write partitioned files.
+                ARROW_RETURN_NOT_OK(arrow::dataset::FileSystemDataset::Write(write_options, scanner));
+            }
+
             /**
              * @brief Returns a pointer to the stream writer for writing to the destination.
              * 
@@ -398,7 +448,7 @@ namespace parquetembed
              */
             void read()
             {
-                if(partition())
+                if(partition)
                 {
                     // Create a scanner 
                     arrow::dataset::ScannerBuilder scanner_builder(dataset);
@@ -416,6 +466,17 @@ namespace parquetembed
                     numRows = out->num_rows();
                     parquet_table = out;
                 }
+            }
+
+            /**
+             * @brief Returns a boolean so we know if we are writing partitioned files.
+             * 
+             * @return true If we are partitioning.
+             * @return false If we are writing a single file.
+             */
+            bool partSetting()
+            {
+                return partition;
             }
 
             /**
@@ -438,14 +499,6 @@ namespace parquetembed
                 {
                     return 'r';
                 }
-            }
-
-            bool partition()
-            {
-                if (p_option[1])
-                    return (p_option[1] == 'M' || p_option[1] == 'm');
-                
-                return false;
             }
 
             // Convert a single batch of Arrow data into Documents
@@ -683,14 +736,17 @@ namespace parquetembed
             int maxRowSize;                                                     //! The maximum size of each parquet row group.
             size_t batchSize;                                                   //! BatchSize for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
             int64_t numRows;                                                    //! The number of result rows that are read from the parquet file. 
+            bool partition;                                                     //! Boolean variable to track whether we are writing partitioned files or not.
             std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.
             std::string p_location;                                             //! Location to read parquet file from.
             std::string p_destination;                                          //! Destination to write parquet file to.
+            std::string p_partDir;                                              //! Directory to create for writing partitioned files.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
             std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
             std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
+            arrow::dataset::FileSystemDatasetWriteOptions write_options;                    //! Write options for writing partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
             std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.
@@ -774,6 +830,7 @@ namespace parquetembed
             : logctx(_logctx), typeInfo(_typeInfo), firstParam(_firstParam), dummyField("<row>", NULL, typeInfo), thisParam(_firstParam)
         {
             r_parquet = _parquet;
+            partition = _parquet->partSetting();
         }
 
         int numFields();
@@ -829,6 +886,7 @@ namespace parquetembed
         TokenSerializer m_tokenSerializer;
 
         std::shared_ptr<ParquetHelper> r_parquet;
+        bool partition;                                 //! Local copy of a boolean so we can know if we are writing partitioned files or not.
     };
 
     /**
@@ -851,7 +909,6 @@ namespace parquetembed
             : input(_input), ParquetRecordBinder(_logctx, _typeInfo, _firstParam, _parquet)
         {
             d_parquet = _parquet;
-
             // getFieldTypes(_typeInfo);
 
             reportIfFailure(d_parquet->fieldsToSchema(_typeInfo));
@@ -878,21 +935,36 @@ namespace parquetembed
          */
         void executeAll()
         {
-            d_parquet->openWriteFile();
+            arrow::Status state = d_parquet->openWriteFile();
+            if(state != arrow::Status::OK())
+                failx("Error opening file to write parquet data. %s", state.message().c_str());
 
-            for(int i = 1; bindNext(); i++)
+            if(partition)
             {
-                // After all the fields have been written end the row
-                *d_parquet->write() << parquet::EndRow;
-                
-                if (i % d_parquet->getMaxRowSize() == 0) 
+                while(bindNext())
                 {
-                    // At the end of each row group send EndRowGroup.
-                    // If EndRowGroup is not explicitly passed in then the 
-                    // groups are created automatically.
-                    *d_parquet->write() << parquet::EndRowGroup;
+                    // Add rows to arrow table
                 }
-            }   
+
+                // write table to partition
+
+            }
+            else
+            {
+                for(int i = 1; bindNext(); i++)
+                {
+                    // After all the fields have been written end the row
+                    *d_parquet->write() << parquet::EndRow;
+                    
+                    if (i % d_parquet->getMaxRowSize() == 0) 
+                    {
+                        // At the end of each row group send EndRowGroup.
+                        // If EndRowGroup is not explicitly passed in then the 
+                        // groups are created automatically.
+                        *d_parquet->write() << parquet::EndRowGroup;
+                    }
+                }   
+            }
         }
 
     protected:

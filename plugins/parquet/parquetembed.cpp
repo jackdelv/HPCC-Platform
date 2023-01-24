@@ -774,6 +774,130 @@ namespace parquetembed
     }
 
     /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param len Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindUtf8ToTable(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        size32_t utf8chars;
+        rtlDataAttr utf8;
+        rtlUtf8ToUtf8X(utf8chars, utf8.refstr(), len, value);
+        *r_parquet->write() << std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata()));
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param len Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindStringToTable(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << std::string(value, len);
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context. 
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindBoolToTable(bool value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << value;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param len Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context. 
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindDataToTable(unsigned len, const void *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        size32_t bytes;
+        rtlDataAttr data;
+        rtlStrToDataX(bytes, data.refdata(), len, value);
+
+        *r_parquet->write() << std::string(data.getstr(), bytes);
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context. 
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindIntToTable(__int64 value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        int64_t val = value;
+        *r_parquet->write() << val;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindUIntToTable(unsigned __int64 value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        uint64_t val = value;
+        *r_parquet->write() << val;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindRealToTable(double value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << value;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param chars Number of chars in value.
+     * @param value pointer to value of parameter.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindUnicodeToTable(unsigned chars, const UChar *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        size32_t utf8chars;
+        char *utf8;
+        rtlUnicodeToUtf8X(utf8chars, utf8, chars, value);
+        *r_parquet->write() << utf8;
+    }
+
+    /**
+     * @brief Writes the value to the parquet file using the StreamWriter from the ParquetHelper class.
+     * 
+     * @param value Decimal value represented as a string.
+     * @param field RtlFieldInfo holds meta information about the embed context.
+     * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
+     */
+    void bindDecimalToTable(std::string value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
+    {
+        *r_parquet->write() << value;
+    }
+
+    /**
      * @brief Calls the typeInfo member function process to write an ECL row to parquet.
      * 
      * @param row Pointer to ECL row.
@@ -794,7 +918,16 @@ namespace parquetembed
     void ParquetRecordBinder::processString(unsigned len, const char *value, const RtlFieldInfo * field)
     {
         checkNextParam(field);
-        bindStringParam(len, value, field, r_parquet);
+
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindStringParam(len, value, field, r_parquet);
+        }
+        
     }
 
     /**
@@ -805,7 +938,14 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processBool(bool value, const RtlFieldInfo * field)
     {
-        bindBoolParam(value, field, r_parquet);
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindBoolParam(value, field, r_parquet);
+        }
     }
 
     /**
@@ -817,7 +957,14 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processData(unsigned len, const void *value, const RtlFieldInfo * field)
     {
-        bindDataParam(len, value, field, r_parquet);
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindDataParam(len, value, field, r_parquet);
+        }
     }
 
     /**
@@ -828,7 +975,14 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processInt(__int64 value, const RtlFieldInfo * field)
     {
-        bindIntParam(value, field, r_parquet);
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindIntParam(value, field, r_parquet);
+        }
     }
 
     /**
@@ -839,7 +993,14 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processUInt(unsigned __int64 value, const RtlFieldInfo * field)
     {
-        bindUIntParam(value, field, r_parquet);
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindUIntParam(value, field, r_parquet);
+        }
     }
 
     /**
@@ -850,7 +1011,14 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processReal(double value, const RtlFieldInfo * field)
     {
-        bindRealParam(value, field, r_parquet);
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindRealParam(value, field, r_parquet);
+        }
     }
 
     /**
@@ -868,7 +1036,15 @@ namespace parquetembed
         rtlDataAttr decText;
         val.setDecimal(digits, precision, value);
         val.getStringX(bytes, decText.refstr());
-        bindDecimalParam(decText.getstr(), field, r_parquet);
+        
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindDecimalParam(decText.getstr(), field, r_parquet);
+        }
     }
 
     /**
@@ -880,7 +1056,14 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processUnicode(unsigned chars, const UChar *value, const RtlFieldInfo * field)
     {
-        bindUnicodeParam(chars, value, field, r_parquet);
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindUnicodeParam(chars, value, field, r_parquet);
+        }
     }
 
     /**
@@ -895,7 +1078,15 @@ namespace parquetembed
         size32_t charCount;
         rtlDataAttr text;
         rtlQStrToStrX(charCount, text.refstr(), len, value);
-        processUtf8(charCount, text.getstr(), field);
+        
+        if(partition)
+        {
+
+        }
+        else
+        {
+            processUtf8(charCount, text.getstr(), field);
+        }
     }
 
     /**
@@ -907,7 +1098,14 @@ namespace parquetembed
      */
     void ParquetRecordBinder::processUtf8(unsigned chars, const char *value, const RtlFieldInfo * field)
     {
-        bindUtf8Param(chars, value, field, r_parquet);
+        if(partition)
+        {
+
+        }
+        else
+        {
+            bindUtf8Param(chars, value, field, r_parquet);
+        }
     }
 
     /**
@@ -1036,6 +1234,7 @@ namespace parquetembed
         const char *option = ""; // Read(r), Write(w)
         const char *location = ""; // file name and location of where to write parquet file
         const char *destination = ""; // file name and location of where to read parquet file from
+        const char *partDir = ""; // Directory to be created when writing partitioned data.
         int rowsize = 1000; // Size of the row groups when writing to parquet files
         int batchSize = 100; // Size of the batches when converting parquet columns to rows
         // Iterate through user options and save them
@@ -1055,6 +1254,8 @@ namespace parquetembed
                     location = val;
                 else if (stricmp(optName, "destination") == 0)
                     destination = val;
+                else if (stricmp(optName, "partitionDirectory") == 0)
+                    partDir = val;
                 else if (stricmp(optName, "MaxRowSize") == 0)
                     rowsize = atoi(val);
                 else if (stricmp(optName, "BatchSize") == 0)
@@ -1063,7 +1264,7 @@ namespace parquetembed
                     failx("Unknown option %s", optName.str());
             }
         }
-        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, rowsize, batchSize));
+        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, partDir, rowsize, batchSize));
         m_parquet = ptr;
     }
 

@@ -633,7 +633,7 @@ namespace parquetembed
              * 
              * @param rowsize The max row group size when reading parquet files.
              * 
-             * @param batchSize The size of the batches when converting parquet columns to rows.
+             * @param _batchSize The size of the batches when converting parquet columns to rows.
              */
             ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize)
             {
@@ -641,8 +641,11 @@ namespace parquetembed
                 p_location = location;
                 p_destination = destination;
                 p_partDir = partDir;
-                maxRowSize = rowsize;
-                batchSize = _batchSize;
+                row_size = rowsize;
+                batch_size = _batchSize;
+
+                parquet_doc.reserve(rowsize);
+                current_row = 0;
 
                 if (option[1])
                     partition = (option[1] == 'M' || option[1] == 'm');
@@ -672,6 +675,17 @@ namespace parquetembed
             {
                 return std::static_pointer_cast<parquet::schema::GroupNode>(
                     parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes));
+            }
+
+            std::shared_ptr<arrow::Schema> getSchema()
+            {
+                parquet::SchemaDescriptor descr;
+                std::shared_ptr<::arrow::Schema> result_schema;
+                arrow::Status st = parquet::arrow::FromParquetSchema(&descr, &result_schema);
+                if(!st.ok())
+                    failx("Parquet Error: %s", st.message().c_str());
+
+                return result_schema;
             }
 
             /**
@@ -713,15 +727,9 @@ namespace parquetembed
                 {
                     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
 
-                    parquet::WriterProperties::Builder builder;
-                    // schema = std::static_pointer_cast<parquet::schema::GroupNode>(fieldInfo->schema_root());
-                    // auto field1 = schema->field(2);          
+                    // parquet::WriterProperties::Builder builder;
 
-                    // std::shared_ptr<parquet::ParquetFileWriter fw = parquet::ParquetFileWriter::Open(outfile, schema, builder.build());
-
-                    // fw->SetMaxRowGroupSize(maxRowSize);
-
-                    parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
+                    // parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
                 }
                 return arrow::Status::OK();
             }
@@ -758,6 +766,33 @@ namespace parquetembed
                 }
                 else
                 {
+                    arrow::MemoryPool* pool = arrow::default_memory_pool();
+
+                    //   // Configure general Parquet reader settings
+                    //   auto reader_properties = parquet::ReaderProperties(pool);
+                    //   reader_properties.set_buffer_size(4096 * 4);
+                    //   reader_properties.enable_buffered_stream();
+
+                    //   // Configure Arrow-specific Parquet reader settings
+                    //   auto arrow_reader_props = parquet::ArrowReaderProperties();
+                    //   arrow_reader_props.set_batch_size(128 * 1024);  // default 64 * 1024
+
+                    //   parquet::arrow::FileReaderBuilder reader_builder;
+                    //   ARROW_RETURN_NOT_OK(
+                    //       reader_builder.OpenFile(path_to_file, /*memory_map=*/false, reader_properties));
+                    //   reader_builder.memory_pool(pool);
+                    //   reader_builder.properties(arrow_reader_props);
+
+                    //   std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+                    //   ARROW_ASSIGN_OR_RAISE(arrow_reader, reader_builder.Build());
+
+                    //   std::shared_ptr<::arrow::RecordBatchReader> rb_reader;
+                    //   ARROW_RETURN_NOT_OK(arrow_reader->GetRecordBatchReader(&rb_reader));
+
+                    //   for (arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch : *rb_reader) {
+                    //     // Operate on each batch...
+                    //   }
+
                     PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
 
                     PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
@@ -780,9 +815,32 @@ namespace parquetembed
              * 
              * @return std::shared_ptr<parquet::StreamWriter> 
              */
-            std::shared_ptr<parquet::StreamWriter> write()
+            std::shared_ptr<arrow::io::FileOutputStream> write()
             {
-                return parquet_write;
+                return outfile;
+            }
+
+            rapidjson::Document * doc()
+            {
+                return &parquet_doc[current_row];
+            }
+
+            rapidjson::MemoryPoolAllocator<>& allocator()
+            {
+                return *jsonAlloc;
+            }
+
+            void update_row()
+            {
+                if(current_row == row_size)
+                    current_row = 0;
+                else
+                    current_row++;
+            }
+
+            std::vector<rapidjson::Document> record_batch()
+            {
+                return std::move(parquet_doc);
             }
 
             /**
@@ -793,6 +851,8 @@ namespace parquetembed
             {
                 if(partition)
                 {
+                    // This should be changed as well, so we can get a RecordBatchReader from the scanner rather than
+                    // read it all into a single table.
                     // Create a scanner 
                     arrow::dataset::ScannerBuilder scanner_builder(dataset);
                     PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
@@ -804,6 +864,7 @@ namespace parquetembed
                 }
                 else
                 {
+                    // Change this to be called multiple times and each time set the parquet_table as the next record batch.
                     std::shared_ptr<arrow::Table> out;
                     PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
                     numRows = out->num_rows();
@@ -829,7 +890,12 @@ namespace parquetembed
              */
             int getMaxRowSize()
             {
-                return maxRowSize;
+                return row_size;
+            }
+
+            int getNumRows()
+            {
+                return numRows;
             }
 
             char options()
@@ -849,13 +915,13 @@ namespace parquetembed
             {
                 RowBatchBuilder builder{batch->num_rows()};
 
-            for (int i = 0; i < batch->num_columns(); ++i) 
-            {
-                builder.SetField(batch->schema()->field(i).get());
-                ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*batch->column(i).get(), &builder));
-            }
+                for (int i = 0; i < batch->num_columns(); ++i) 
+                {
+                    builder.SetField(batch->schema()->field(i).get());
+                    ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*batch->column(i).get(), &builder));
+                }
 
-            return std::move(builder).Rows();
+                return std::move(builder).Rows();
             }
 
             arrow::Iterator<rapidjson::Document> ConvertToIterator(std::shared_ptr<arrow::Table> table, size_t batch_size)
@@ -876,9 +942,37 @@ namespace parquetembed
                 return arrow::MakeFlattenIterator(std::move(nested_iter));
             }
 
+            arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertToRecordBatch(
+                    const std::vector<rapidjson::Document>& rows, std::shared_ptr<arrow::Schema> schema) {
+                // RecordBatchBuilder will create array builders for us for each field in our
+                // schema. By passing the number of output rows (`rows.size()`) we can
+                // pre-allocate the correct size of arrays, except of course in the case of
+                // string, byte, and list arrays, which have dynamic lengths.
+                std::unique_ptr<arrow::RecordBatchBuilder> batch_builder;
+                ARROW_ASSIGN_OR_RAISE(
+                    batch_builder,
+                    arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rows.size()));
+
+                // Inner converter will take rows and be responsible for appending values
+                // to provided array builders.
+                JsonValueConverter converter(rows);
+                for (int i = 0; i < batch_builder->num_fields(); ++i) {
+                    std::shared_ptr<arrow::Field> field = schema->field(i);
+                    arrow::ArrayBuilder* builder = batch_builder->GetField(i);
+                    ARROW_RETURN_NOT_OK(converter.Convert(*field.get(), builder));
+                }
+
+                std::shared_ptr<arrow::RecordBatch> batch;
+                ARROW_ASSIGN_OR_RAISE(batch, batch_builder->Flush());
+
+                // Use RecordBatch::ValidateFull() to make sure arrays were correctly constructed.
+                DCHECK_OK(batch->ValidateFull());
+                return batch;
+            }
+
             void setIterator()
             {
-                output = ConvertToIterator(parquet_table, batchSize);
+                output = ConvertToIterator(parquet_table, batch_size);
             }
 
             arrow::Result<rapidjson::Document> next()
@@ -1076,8 +1170,9 @@ namespace parquetembed
             }
 
         private:
-            int maxRowSize;                                                     //! The maximum size of each parquet row group.
-            size_t batchSize;                                                   //! BatchSize for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
+            int current_row;
+            int row_size;                                                       //! The maximum size of each parquet row group.
+            size_t batch_size;                                                  //! batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
             int64_t numRows;                                                    //! The number of result rows that are read from the parquet file. 
             bool partition;                                                     //! Boolean variable to track whether we are writing partitioned files or not.
             std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.
@@ -1087,9 +1182,11 @@ namespace parquetembed
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
             std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
-            std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
+            // std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
+            std::vector<rapidjson::Document> parquet_doc;         //! Document for converting rows to columns for writing to parquet files.
+            rapidjson::MemoryPoolAllocator<> *jsonAlloc;
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
-            arrow::dataset::FileSystemDatasetWriteOptions write_options;                    //! Write options for writing partitioned files.
+            arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
             std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.
@@ -1272,6 +1369,9 @@ namespace parquetembed
          */
         bool bindNext()
         {
+            // Instantiate Document object
+            d_parquet->doc()->SetObject();
+
             roxiemem::OwnedConstRoxieRow nextRow = (const byte *) input->ungroupedNextRow();
             if (!nextRow)
                 return false;

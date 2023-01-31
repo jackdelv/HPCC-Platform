@@ -26,6 +26,8 @@
 #include "arrow/dataset/api.h"
 #include "arrow/filesystem/api.h"
 #include "arrow/io/file.h"
+#include "arrow/util/logging.h"
+#include "arrow/ipc/api.h"
 
 #include "parquet/arrow/reader.h"
 #include "parquet/arrow/schema.h"
@@ -135,6 +137,8 @@ namespace parquetembed
         {
         }
     };
+
+    const rapidjson::Value kNullJsonSingleton = rapidjson::Value();
 
     class RowBatchBuilder
     {
@@ -272,6 +276,270 @@ namespace parquetembed
         std::vector<rapidjson::Document> rows_;
     };
 
+    class DocValuesIterator {
+    public:
+    /// \param rows vector of rows
+    /// \param path field names to enter
+    /// \param array_levels number of arrays to enter
+    DocValuesIterator(const std::vector<rapidjson::Document>& rows,
+                        std::vector<std::string> path, int64_t array_levels)
+        : rows(rows), path(std::move(path)), array_levels(array_levels) {}
+
+    const rapidjson::Value* NextArrayOrRow(const rapidjson::Value* value, size_t* path_i,
+                                            int64_t* arr_i) {
+        while (array_stack.size() > 0) {
+        ArrayPosition& pos = array_stack.back();
+        // Try to get next position in Array
+        if (pos.index + 1 < pos.array_node->Size()) {
+            ++pos.index;
+            value = &(*pos.array_node)[pos.index];
+            *path_i = pos.path_index;
+            *arr_i = array_stack.size();
+            return value;
+        } else {
+            array_stack.pop_back();
+        }
+        }
+        ++row_i;
+        if (row_i < rows.size()) {
+        value = static_cast<const rapidjson::Value*>(&rows[row_i]);
+        } else {
+        value = nullptr;
+        }
+        *path_i = 0;
+        *arr_i = 0;
+        return value;
+    }
+
+    arrow::Result<const rapidjson::Value*> Next() {
+        const rapidjson::Value* value = nullptr;
+        size_t path_i;
+        int64_t arr_i;
+        // Can either start at document or at last array level
+        if (array_stack.size() > 0) {
+        auto pos = array_stack.back();
+        value = pos.array_node;
+        path_i = pos.path_index;
+        arr_i = array_stack.size() - 1;
+        }
+
+        value = NextArrayOrRow(value, &path_i, &arr_i);
+
+        // Traverse to desired level (with possible backtracking as needed)
+        while (path_i < path.size() || arr_i < array_levels) {
+        if (value == nullptr) {
+            return value;
+        } else if (value->IsArray() && value->Size() > 0) {
+            ArrayPosition pos;
+            pos.array_node = value;
+            pos.path_index = path_i;
+            pos.index = 0;
+            array_stack.push_back(pos);
+
+            value = &(*value)[0];
+            ++arr_i;
+        } else if (value->IsArray()) {
+            // Empty array means we need to backtrack and go to next array or row
+            value = NextArrayOrRow(value, &path_i, &arr_i);
+        } else if (value->HasMember(path[path_i])) {
+            value = &(*value)[path[path_i]];
+            ++path_i;
+        } else {
+            return &kNullJsonSingleton;
+        }
+        }
+
+        // Return value
+        return value;
+    }
+
+    private:
+    const std::vector<rapidjson::Document>& rows;
+    std::vector<std::string> path;
+    int64_t array_levels;
+    size_t row_i = -1;  // index of current row
+
+    // Info about array position for one array level in array stack
+    struct ArrayPosition {
+        const rapidjson::Value* array_node;
+        int64_t path_index;
+        rapidjson::SizeType index;
+    };
+    std::vector<ArrayPosition> array_stack;
+    };
+
+    class JsonValueConverter {
+    public:
+    explicit JsonValueConverter(const std::vector<rapidjson::Document>& rows)
+        : rows_(rows), array_levels_(0) {}
+
+    JsonValueConverter(const std::vector<rapidjson::Document>& rows,
+                        const std::vector<std::string>& root_path, int64_t array_levels)
+        : rows_(rows), root_path_(root_path), array_levels_(array_levels) {}
+
+    /// \brief For field passed in, append corresponding values to builder
+    arrow::Status Convert(const arrow::Field& field, arrow::ArrayBuilder* builder) {
+        return Convert(field, field.name(), builder);
+    }
+
+    /// \brief For field passed in, append corresponding values to builder
+    arrow::Status Convert(const arrow::Field& field, const std::string& field_name,
+                            arrow::ArrayBuilder* builder) {
+        field_name_ = field_name;
+        builder_ = builder;
+        ARROW_RETURN_NOT_OK(arrow::VisitTypeInline(*field.type().get(), this));
+        return arrow::Status::OK();
+    }
+
+    // Default implementation
+    arrow::Status Visit(const arrow::DataType& type) {
+        return arrow::Status::NotImplemented(
+            "Can not convert json value to Arrow array of type ", type.ToString());
+    }
+
+    arrow::Status Visit(const arrow::Int64Type& type) {
+        arrow::Int64Builder* builder = static_cast<arrow::Int64Builder*>(builder_);
+        for (const auto& maybe_value : FieldValues()) {
+        ARROW_ASSIGN_OR_RAISE(auto value, maybe_value);
+        if (value->IsNull()) {
+            ARROW_RETURN_NOT_OK(builder->AppendNull());
+        } else {
+            if (value->IsUint()) {
+            ARROW_RETURN_NOT_OK(builder->Append(value->GetUint()));
+            } else if (value->IsInt()) {
+            ARROW_RETURN_NOT_OK(builder->Append(value->GetInt()));
+            } else if (value->IsUint64()) {
+            ARROW_RETURN_NOT_OK(builder->Append(value->GetUint64()));
+            } else if (value->IsInt64()) {
+            ARROW_RETURN_NOT_OK(builder->Append(value->GetInt64()));
+            } else {
+            return arrow::Status::Invalid("Value is not an integer");
+            }
+        }
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::DoubleType& type) {
+        arrow::DoubleBuilder* builder = static_cast<arrow::DoubleBuilder*>(builder_);
+        for (const auto& maybe_value : FieldValues()) {
+        ARROW_ASSIGN_OR_RAISE(auto value, maybe_value);
+        if (value->IsNull()) {
+            ARROW_RETURN_NOT_OK(builder->AppendNull());
+        } else {
+            ARROW_RETURN_NOT_OK(builder->Append(value->GetDouble()));
+        }
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::StringType& type) {
+        arrow::StringBuilder* builder = static_cast<arrow::StringBuilder*>(builder_);
+        for (const auto& maybe_value : FieldValues()) {
+        ARROW_ASSIGN_OR_RAISE(auto value, maybe_value);
+        if (value->IsNull()) {
+            ARROW_RETURN_NOT_OK(builder->AppendNull());
+        } else {
+            ARROW_RETURN_NOT_OK(builder->Append(value->GetString()));
+        }
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::BooleanType& type) {
+        arrow::BooleanBuilder* builder = static_cast<arrow::BooleanBuilder*>(builder_);
+        for (const auto& maybe_value : FieldValues()) {
+        ARROW_ASSIGN_OR_RAISE(auto value, maybe_value);
+        if (value->IsNull()) {
+            ARROW_RETURN_NOT_OK(builder->AppendNull());
+        } else {
+            ARROW_RETURN_NOT_OK(builder->Append(value->GetBool()));
+        }
+        }
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::StructType& type) {
+        arrow::StructBuilder* builder = static_cast<arrow::StructBuilder*>(builder_);
+
+        std::vector<std::string> child_path(root_path_);
+        if (field_name_.size() > 0) {
+        child_path.push_back(field_name_);
+        }
+        auto child_converter = JsonValueConverter(rows_, child_path, array_levels_);
+
+        for (int i = 0; i < type.num_fields(); ++i) {
+        std::shared_ptr<arrow::Field> child_field = type.field(i);
+        std::shared_ptr<arrow::ArrayBuilder> child_builder = builder->child_builder(i);
+
+        ARROW_RETURN_NOT_OK(
+            child_converter.Convert(*child_field.get(), child_builder.get()));
+        }
+
+        // Make null bitmap
+        for (const auto& maybe_value : FieldValues()) {
+        ARROW_ASSIGN_OR_RAISE(auto value, maybe_value);
+        ARROW_RETURN_NOT_OK(builder->Append(!value->IsNull()));
+        }
+
+        return arrow::Status::OK();
+    }
+
+    arrow::Status Visit(const arrow::ListType& type) {
+        arrow::ListBuilder* builder = static_cast<arrow::ListBuilder*>(builder_);
+
+        // Values and offsets needs to be interleaved in ListBuilder, so first collect the
+        // values
+        std::unique_ptr<arrow::ArrayBuilder> tmp_value_builder;
+        ARROW_ASSIGN_OR_RAISE(tmp_value_builder,
+                            arrow::MakeBuilder(builder->value_builder()->type()));
+        std::vector<std::string> child_path(root_path_);
+        child_path.push_back(field_name_);
+        auto child_converter = JsonValueConverter(rows_, child_path, array_levels_ + 1);
+        ARROW_RETURN_NOT_OK(
+            child_converter.Convert(*type.value_field().get(), "", tmp_value_builder.get()));
+
+        std::shared_ptr<arrow::Array> values_array;
+        ARROW_RETURN_NOT_OK(tmp_value_builder->Finish(&values_array));
+        std::shared_ptr<arrow::ArrayData> values_data = values_array->data();
+
+        arrow::ArrayBuilder* value_builder = builder->value_builder();
+        int64_t offset = 0;
+        for (const auto& maybe_value : FieldValues()) {
+        ARROW_ASSIGN_OR_RAISE(auto value, maybe_value);
+        ARROW_RETURN_NOT_OK(builder->Append(!value->IsNull()));
+        if (!value->IsNull() && value->Size() > 0) {
+            ARROW_RETURN_NOT_OK(
+                value_builder->AppendArraySlice(*values_data.get(), offset, value->Size()));
+            offset += value->Size();
+        }
+        }
+
+        return arrow::Status::OK();
+    }
+
+    private:
+    std::string field_name_;
+    arrow::ArrayBuilder* builder_;
+    const std::vector<rapidjson::Document>& rows_;
+    std::vector<std::string> root_path_;
+    int64_t array_levels_;
+
+    /// Return a flattened iterator over values at nested location
+    arrow::Iterator<const rapidjson::Value*> FieldValues() {
+        std::vector<std::string> path(root_path_);
+        if (field_name_.size() > 0) {
+        path.push_back(field_name_);
+        }
+        auto iter = DocValuesIterator(rows_, std::move(path), array_levels_);
+        auto fn = [iter]() mutable -> arrow::Result<const rapidjson::Value*> {
+        return iter.Next();
+        };
+
+        return arrow::MakeFunctionIterator(fn);
+    }
+    };
+
     /**
      * @brief ParquetHelper holds the inputs from the user, the file stream objects, function for setting the schema, and functions 
      * for opening parquet files.
@@ -290,7 +558,7 @@ namespace parquetembed
              * 
              * @param rowsize The max row group size when reading parquet files.
              * 
-             * @param batchSize The size of the batches when converting parquet columns to rows.
+             * @param _batchSize The size of the batches when converting parquet columns to rows.
              */
             ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize)
             {
@@ -298,8 +566,11 @@ namespace parquetembed
                 p_location = location;
                 p_destination = destination;
                 p_partDir = partDir;
-                maxRowSize = rowsize;
-                batchSize = _batchSize;
+                row_size = rowsize;
+                batch_size = _batchSize;
+
+                parquet_doc.reserve(rowsize);
+                current_row = 0;
 
                 if (option[1])
                     partition = (option[1] == 'M' || option[1] == 'm');
@@ -329,6 +600,17 @@ namespace parquetembed
             {
                 return std::static_pointer_cast<parquet::schema::GroupNode>(
                     parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes));
+            }
+
+            std::shared_ptr<arrow::Schema> getSchema()
+            {
+                parquet::SchemaDescriptor descr;
+                std::shared_ptr<::arrow::Schema> result_schema;
+                arrow::Status st = parquet::arrow::FromParquetSchema(&descr, &result_schema);
+                if(!st.ok())
+                    failx("Parquet Error: %s", st.message().c_str());
+
+                return result_schema;
             }
 
             /**
@@ -370,15 +652,9 @@ namespace parquetembed
                 {
                     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
 
-                    parquet::WriterProperties::Builder builder;
-                    // schema = std::static_pointer_cast<parquet::schema::GroupNode>(fieldInfo->schema_root());
-                    // auto field1 = schema->field(2);          
+                    // parquet::WriterProperties::Builder builder;
 
-                    // std::shared_ptr<parquet::ParquetFileWriter fw = parquet::ParquetFileWriter::Open(outfile, schema, builder.build());
-
-                    // fw->SetMaxRowGroupSize(maxRowSize);
-
-                    parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
+                    // parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
                 }
                 return arrow::Status::OK();
             }
@@ -415,6 +691,33 @@ namespace parquetembed
                 }
                 else
                 {
+                    arrow::MemoryPool* pool = arrow::default_memory_pool();
+
+                    //   // Configure general Parquet reader settings
+                    //   auto reader_properties = parquet::ReaderProperties(pool);
+                    //   reader_properties.set_buffer_size(4096 * 4);
+                    //   reader_properties.enable_buffered_stream();
+
+                    //   // Configure Arrow-specific Parquet reader settings
+                    //   auto arrow_reader_props = parquet::ArrowReaderProperties();
+                    //   arrow_reader_props.set_batch_size(128 * 1024);  // default 64 * 1024
+
+                    //   parquet::arrow::FileReaderBuilder reader_builder;
+                    //   ARROW_RETURN_NOT_OK(
+                    //       reader_builder.OpenFile(path_to_file, /*memory_map=*/false, reader_properties));
+                    //   reader_builder.memory_pool(pool);
+                    //   reader_builder.properties(arrow_reader_props);
+
+                    //   std::unique_ptr<parquet::arrow::FileReader> arrow_reader;
+                    //   ARROW_ASSIGN_OR_RAISE(arrow_reader, reader_builder.Build());
+
+                    //   std::shared_ptr<::arrow::RecordBatchReader> rb_reader;
+                    //   ARROW_RETURN_NOT_OK(arrow_reader->GetRecordBatchReader(&rb_reader));
+
+                    //   for (arrow::Result<std::shared_ptr<arrow::RecordBatch>> maybe_batch : *rb_reader) {
+                    //     // Operate on each batch...
+                    //   }
+
                     PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
 
                     PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
@@ -437,9 +740,32 @@ namespace parquetembed
              * 
              * @return std::shared_ptr<parquet::StreamWriter> 
              */
-            std::shared_ptr<parquet::StreamWriter> write()
+            std::shared_ptr<arrow::io::FileOutputStream> write()
             {
-                return parquet_write;
+                return outfile;
+            }
+
+            rapidjson::Document * doc()
+            {
+                return &parquet_doc[current_row];
+            }
+
+            rapidjson::MemoryPoolAllocator<>& allocator()
+            {
+                return *jsonAlloc;
+            }
+
+            void update_row()
+            {
+                if(current_row == row_size)
+                    current_row = 0;
+                else
+                    current_row++;
+            }
+
+            std::vector<rapidjson::Document> record_batch()
+            {
+                return std::move(parquet_doc);
             }
 
             /**
@@ -450,6 +776,8 @@ namespace parquetembed
             {
                 if(partition)
                 {
+                    // This should be changed as well, so we can get a RecordBatchReader from the scanner rather than
+                    // read it all into a single table.
                     // Create a scanner 
                     arrow::dataset::ScannerBuilder scanner_builder(dataset);
                     PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
@@ -461,6 +789,7 @@ namespace parquetembed
                 }
                 else
                 {
+                    // Change this to be called multiple times and each time set the parquet_table as the next record batch.
                     std::shared_ptr<arrow::Table> out;
                     PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
                     numRows = out->num_rows();
@@ -486,7 +815,12 @@ namespace parquetembed
              */
             int getMaxRowSize()
             {
-                return maxRowSize;
+                return row_size;
+            }
+
+            int getNumRows()
+            {
+                return numRows;
             }
 
             char options()
@@ -506,13 +840,13 @@ namespace parquetembed
             {
                 RowBatchBuilder builder{batch->num_rows()};
 
-            for (int i = 0; i < batch->num_columns(); ++i) 
-            {
-                builder.SetField(batch->schema()->field(i).get());
-                ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*batch->column(i).get(), &builder));
-            }
+                for (int i = 0; i < batch->num_columns(); ++i) 
+                {
+                    builder.SetField(batch->schema()->field(i).get());
+                    ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*batch->column(i).get(), &builder));
+                }
 
-            return std::move(builder).Rows();
+                return std::move(builder).Rows();
             }
 
             arrow::Iterator<rapidjson::Document> ConvertToIterator(std::shared_ptr<arrow::Table> table, size_t batch_size)
@@ -533,9 +867,37 @@ namespace parquetembed
                 return arrow::MakeFlattenIterator(std::move(nested_iter));
             }
 
+            arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertToRecordBatch(
+                    const std::vector<rapidjson::Document>& rows, std::shared_ptr<arrow::Schema> schema) {
+                // RecordBatchBuilder will create array builders for us for each field in our
+                // schema. By passing the number of output rows (`rows.size()`) we can
+                // pre-allocate the correct size of arrays, except of course in the case of
+                // string, byte, and list arrays, which have dynamic lengths.
+                std::unique_ptr<arrow::RecordBatchBuilder> batch_builder;
+                ARROW_ASSIGN_OR_RAISE(
+                    batch_builder,
+                    arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rows.size()));
+
+                // Inner converter will take rows and be responsible for appending values
+                // to provided array builders.
+                JsonValueConverter converter(rows);
+                for (int i = 0; i < batch_builder->num_fields(); ++i) {
+                    std::shared_ptr<arrow::Field> field = schema->field(i);
+                    arrow::ArrayBuilder* builder = batch_builder->GetField(i);
+                    ARROW_RETURN_NOT_OK(converter.Convert(*field.get(), builder));
+                }
+
+                std::shared_ptr<arrow::RecordBatch> batch;
+                ARROW_ASSIGN_OR_RAISE(batch, batch_builder->Flush());
+
+                // Use RecordBatch::ValidateFull() to make sure arrays were correctly constructed.
+                DCHECK_OK(batch->ValidateFull());
+                return batch;
+            }
+
             void setIterator()
             {
-                output = ConvertToIterator(parquet_table, batchSize);
+                output = ConvertToIterator(parquet_table, batch_size);
             }
 
             arrow::Result<rapidjson::Document> next()
@@ -733,8 +1095,9 @@ namespace parquetembed
             }
 
         private:
-            int maxRowSize;                                                     //! The maximum size of each parquet row group.
-            size_t batchSize;                                                   //! BatchSize for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
+            int current_row;
+            int row_size;                                                       //! The maximum size of each parquet row group.
+            size_t batch_size;                                                  //! batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
             int64_t numRows;                                                    //! The number of result rows that are read from the parquet file. 
             bool partition;                                                     //! Boolean variable to track whether we are writing partitioned files or not.
             std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.
@@ -744,9 +1107,11 @@ namespace parquetembed
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
             std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
-            std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
+            // std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
+            std::vector<rapidjson::Document> parquet_doc;         //! Document for converting rows to columns for writing to parquet files.
+            rapidjson::MemoryPoolAllocator<> *jsonAlloc;
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
-            arrow::dataset::FileSystemDatasetWriteOptions write_options;                    //! Write options for writing partitioned files.
+            arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
             std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.
@@ -923,6 +1288,9 @@ namespace parquetembed
          */
         bool bindNext()
         {
+            // Instantiate Document object
+            d_parquet->doc()->SetObject();
+
             roxiemem::OwnedConstRoxieRow nextRow = (const byte *) input->ungroupedNextRow();
             if (!nextRow)
                 return false;
@@ -954,16 +1322,34 @@ namespace parquetembed
                 for(int i = 1; bindNext(); i++)
                 {
                     // After all the fields have been written end the row
-                    *d_parquet->write() << parquet::EndRow;
+                    // *d_parquet->write() << parquet::EndRow;
                     
-                    if (i % d_parquet->getMaxRowSize() == 0) 
+                    if (i % d_parquet->getMaxRowSize() == 0 || i == d_parquet->getNumRows()) 
                     {
-                        // At the end of each row group send EndRowGroup.
-                        // If EndRowGroup is not explicitly passed in then the 
-                        // groups are created automatically.
-                        *d_parquet->write() << parquet::EndRowGroup;
+                        // convert row_batch vector to RecordBatch and write to file.
+                        arrow::Result<std::shared_ptr<arrow::RecordBatch>> result = d_parquet->ConvertToRecordBatch(d_parquet->record_batch(), d_parquet->getSchema());
+                        if(!result.ok())
+                        {
+                            failx("Parquet Error: %s", result.status().message().c_str());
+                        }
+                        else
+                        {
+                            // Set up RecordBatchWriter
+                            std::shared_ptr<arrow::ipc::RecordBatchWriter> ipc_writer = std::move(arrow::ipc::MakeFileWriter(d_parquet->write(), result.ValueOrDie()->schema()).ValueOrDie());
+
+                            // Write the record batch.
+                            arrow::Status st = ipc_writer->WriteRecordBatch(*result.ValueOrDie());
+
+                            if(!st.ok())
+                                failx("Parquet Error: %s", st.message().c_str());
+
+                            st = ipc_writer->Close();
+
+                            if(!st.ok())
+                                failx("Parquet Error: %s", st.message().c_str());
+                        }
                     }
-                }   
+                }
             }
         }
 

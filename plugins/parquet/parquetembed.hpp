@@ -758,9 +758,9 @@ namespace parquetembed
                     current_row++;
             }
 
-            std::vector<rapidjson::Document> record_batch()
+            std::vector<rapidjson::Document> * record_batch()
             {
-                return std::move(parquet_doc);
+                return &parquet_doc;
             }
 
             /**
@@ -811,11 +811,6 @@ namespace parquetembed
             int getMaxRowSize()
             {
                 return row_size;
-            }
-
-            int getNumRows()
-            {
-                return numRows;
             }
 
             char options()
@@ -1102,8 +1097,7 @@ namespace parquetembed
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
             std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
-            // std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
-            std::vector<rapidjson::Document> parquet_doc;         //! Document for converting rows to columns for writing to parquet files.
+            std::vector<rapidjson::Document> parquet_doc;                       //! Document for converting rows to columns for writing to parquet files.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
@@ -1292,6 +1286,32 @@ namespace parquetembed
             return true;
         }
 
+        void writeRecordBatch(std::vector<rapidjson::Document> *batch)
+        {
+            // convert row_batch vector to RecordBatch and write to file.
+            arrow::Result<std::shared_ptr<arrow::RecordBatch>> result = d_parquet->ConvertToRecordBatch(*batch, d_parquet->getSchema());
+            if(!result.ok())
+            {
+                failx("Parquet Error: %s", result.status().message().c_str());
+            }
+            else
+            {
+                // Set up RecordBatchWriter
+                std::shared_ptr<arrow::ipc::RecordBatchWriter> ipc_writer = std::move(arrow::ipc::MakeFileWriter(d_parquet->write(), result.ValueOrDie()->schema()).ValueOrDie());
+
+                // Write the record batch.
+                arrow::Status st = ipc_writer->WriteRecordBatch(*result.ValueOrDie());
+
+                if(!st.ok())
+                    failx("Parquet Error: %s", st.message().c_str());
+
+                st = ipc_writer->Close();
+
+                if(!st.ok())
+                    failx("Parquet Error: %s", st.message().c_str());
+            }
+        }
+
         /**
          * @brief Binds all the rows of the dataset and executes the function.
          */
@@ -1313,36 +1333,22 @@ namespace parquetembed
             }
             else
             {
-                for(int i = 1; bindNext(); i++)
+                int i = 1;
+                int row_size = d_parquet->getMaxRowSize();
+                for(; bindNext(); i++)
                 {
                     // After all the fields have been written end the row
                     // *d_parquet->write() << parquet::EndRow;
                     
-                    if (i % d_parquet->getMaxRowSize() == 0 || i == d_parquet->getNumRows()) 
+                    if (i % row_size == 0) 
                     {
-                        // convert row_batch vector to RecordBatch and write to file.
-                        arrow::Result<std::shared_ptr<arrow::RecordBatch>> result = d_parquet->ConvertToRecordBatch(d_parquet->record_batch(), d_parquet->getSchema());
-                        if(!result.ok())
-                        {
-                            failx("Parquet Error: %s", result.status().message().c_str());
-                        }
-                        else
-                        {
-                            // Set up RecordBatchWriter
-                            std::shared_ptr<arrow::ipc::RecordBatchWriter> ipc_writer = std::move(arrow::ipc::MakeFileWriter(d_parquet->write(), result.ValueOrDie()->schema()).ValueOrDie());
-
-                            // Write the record batch.
-                            arrow::Status st = ipc_writer->WriteRecordBatch(*result.ValueOrDie());
-
-                            if(!st.ok())
-                                failx("Parquet Error: %s", st.message().c_str());
-
-                            st = ipc_writer->Close();
-
-                            if(!st.ok())
-                                failx("Parquet Error: %s", st.message().c_str());
-                        }
+                        writeRecordBatch(r_parquet->record_batch());
                     }
+                }
+                if(--i % row_size != 0)
+                {
+                    r_parquet->record_batch()->resize(i % row_size);
+                    writeRecordBatch(r_parquet->record_batch());
                 }
             }
         }

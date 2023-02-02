@@ -750,11 +750,6 @@ namespace parquetembed
                 return &parquet_doc[current_row];
             }
 
-            rapidjson::MemoryPoolAllocator<>& allocator()
-            {
-                return *jsonAlloc;
-            }
-
             void update_row()
             {
                 if(current_row == row_size)
@@ -1109,7 +1104,6 @@ namespace parquetembed
             std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
             // std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
             std::vector<rapidjson::Document> parquet_doc;         //! Document for converting rows to columns for writing to parquet files.
-            rapidjson::MemoryPoolAllocator<> *jsonAlloc;
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.

@@ -76,6 +76,8 @@ extern "C" PARQUETEMBED_PLUGIN_API bool getECLPluginDefinition(ECLPluginDefiniti
 
 namespace parquetembed
 {
+    static rapidjson::MemoryPoolAllocator<> jsonAlloc;
+
     //--------------------------------------------------------------------------
     // Plugin Classes
     //--------------------------------------------------------------------------
@@ -672,10 +674,10 @@ namespace parquetembed
         rtlDataAttr utf8;
         rtlUtf8ToUtf8X(utf8chars, utf8.refstr(), len, value);
 
-        rapidjson::Value key = rapidjson::Value(field->name, r_parquet->allocator());
-        rapidjson::Value val = rapidjson::Value(std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata())), r_parquet->allocator());
+        rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
+        rapidjson::Value val = rapidjson::Value(std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata())), jsonAlloc);
 
-        r_parquet->doc()->AddMember(key, val, r_parquet->allocator());
+        r_parquet->doc()->AddMember(key, val, jsonAlloc);
     }
 
     /**
@@ -688,10 +690,10 @@ namespace parquetembed
      */
     void bindStringParam(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
     {
-        rapidjson::Value key = rapidjson::Value(field->name, r_parquet->allocator());
-        rapidjson::Value val = rapidjson::Value(std::string(value, len), r_parquet->allocator());
+        rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
+        rapidjson::Value val = rapidjson::Value(std::string(value, len), jsonAlloc);
 
-        r_parquet->doc()->AddMember(key, val, r_parquet->allocator());
+        r_parquet->doc()->AddMember(key, val, jsonAlloc);
     }
 
     /**
@@ -703,7 +705,7 @@ namespace parquetembed
      */
     void bindBoolParam(bool value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
     {
-        r_parquet->doc()->AddMember(rapidjson::Value(field->name, r_parquet->allocator()).Move(), value, r_parquet->allocator());
+        r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), value, jsonAlloc);
     }
 
     /**
@@ -720,10 +722,10 @@ namespace parquetembed
         rtlDataAttr data;
         rtlStrToDataX(bytes, data.refdata(), len, value);
 
-        rapidjson::Value key = rapidjson::Value(field->name, r_parquet->allocator());
-        rapidjson::Value val = rapidjson::Value(std::string(data.getstr(), bytes), r_parquet->allocator());
+        rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
+        rapidjson::Value val = rapidjson::Value(std::string(data.getstr(), bytes), jsonAlloc);
 
-        r_parquet->doc()->AddMember(key, val, r_parquet->allocator());
+        r_parquet->doc()->AddMember(key, val, jsonAlloc);
     }
 
     /**
@@ -737,10 +739,10 @@ namespace parquetembed
     {
         int64_t val = value;
 
-        rapidjson::Value key = rapidjson::Value(field->name, r_parquet->allocator());
+        rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
         rapidjson::Value num(val);
 
-        r_parquet->doc()->AddMember(key, num, r_parquet->allocator());
+        r_parquet->doc()->AddMember(key, num, jsonAlloc);
     }
 
     /**
@@ -754,10 +756,10 @@ namespace parquetembed
     {
         uint64_t val = value;
 
-        rapidjson::Value key = rapidjson::Value(field->name, r_parquet->allocator());
+        rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
         rapidjson::Value num(val);
 
-        r_parquet->doc()->AddMember(key, num, r_parquet->allocator());
+        r_parquet->doc()->AddMember(key, num, jsonAlloc);
     }
 
     /**
@@ -769,7 +771,7 @@ namespace parquetembed
      */
     void bindRealParam(double value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
     {
-        r_parquet->doc()->AddMember(rapidjson::Value(field->name, r_parquet->allocator()).Move(), value, r_parquet->allocator());
+        r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), value, jsonAlloc);
     }
 
     /**
@@ -786,7 +788,7 @@ namespace parquetembed
         char *utf8;
         rtlUnicodeToUtf8X(utf8chars, utf8, chars, value);
 
-        r_parquet->doc()->AddMember(rapidjson::Value(field->name, r_parquet->allocator()).Move(), rapidjson::Value(utf8, r_parquet->allocator()).Move(), r_parquet->allocator());
+        r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), rapidjson::Value(utf8, jsonAlloc).Move(), jsonAlloc);
     }
 
     /**
@@ -798,7 +800,7 @@ namespace parquetembed
      */
     void bindDecimalParam(std::string value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
     {
-        r_parquet->doc()->AddMember(rapidjson::Value(field->name, r_parquet->allocator()).Move(), value, r_parquet->allocator());
+        r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), value, jsonAlloc);
     }
 
     /**

@@ -833,9 +833,9 @@ namespace parquetembed
                     current_row++;
             }
 
-            std::vector<rapidjson::Document> record_batch()
+            std::vector<rapidjson::Document> * record_batch()
             {
-                return std::move(parquet_doc);
+                return &parquet_doc;
             }
 
             /**
@@ -886,11 +886,6 @@ namespace parquetembed
             int getMaxRowSize()
             {
                 return row_size;
-            }
-
-            int getNumRows()
-            {
-                return numRows;
             }
 
             char options()
@@ -1177,8 +1172,7 @@ namespace parquetembed
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<parquet::schema::GroupNode> schema;                 //! GroupNode for utilizing the SchemaDescriptor in opening a file to write to.
             std::shared_ptr<::parquet::SchemaDescriptor> fieldInfo = nullptr;   //! SchemaDescriptor holding field information.
-            // std::shared_ptr<parquet::StreamWriter> parquet_write = nullptr;     //! Output stream for writing to parquet files.
-            std::vector<rapidjson::Document> parquet_doc;         //! Document for converting rows to columns for writing to parquet files.
+            std::vector<rapidjson::Document> parquet_doc;                       //! Document for converting rows to columns for writing to parquet files.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.

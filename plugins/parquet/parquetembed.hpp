@@ -30,6 +30,7 @@
 #include "arrow/ipc/api.h"
 
 #include "parquet/arrow/reader.h"
+#include "parquet/arrow/writer.h"
 #include "parquet/arrow/schema.h"
 #include "parquet/exception.h"
 #include "parquet/stream_reader.h"
@@ -420,9 +421,9 @@ namespace parquetembed
         return arrow::Status::OK();
     }
 
-    arrow::Status Visit(const arrow::HalfFloatType& type) 
+    arrow::Status Visit(const arrow::FloatType& type) 
     {
-        arrow::HalfFloatBuilder* builder = static_cast<arrow::HalfFloatBuilder*>(builder_);
+        arrow::FloatBuilder* builder = static_cast<arrow::FloatBuilder*>(builder_);
         for (const auto& maybe_value : FieldValues()) {
         ARROW_ASSIGN_OR_RAISE(auto value, maybe_value);
         if (value->IsNull()) {
@@ -702,7 +703,7 @@ namespace parquetembed
                 }
                 else
                 {
-                    arrow::MemoryPool* pool = arrow::default_memory_pool();
+                    // arrow::MemoryPool* pool = arrow::default_memory_pool();
 
                     //   // Configure general Parquet reader settings
                     //   auto reader_properties = parquet::ReaderProperties(pool);
@@ -957,7 +958,7 @@ namespace parquetembed
                         }  
                         break;
                     case type_real:
-                        arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::float16()));
+                        arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::float64()));
                         break;
                     case type_string:
                         arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
@@ -1282,23 +1283,48 @@ namespace parquetembed
             arrow::Result<std::shared_ptr<arrow::RecordBatch>> result = d_parquet->ConvertToRecordBatch(*batch, d_parquet->getSchema());
             if(!result.ok())
             {
-                failx("Parquet Error: %s", result.status().message().c_str());
+                failx("Error writing RecordBatch, %s", result.status().message().c_str());
             }
             else
             {
-                // Set up RecordBatchWriter
-                std::shared_ptr<arrow::ipc::RecordBatchWriter> ipc_writer = std::move(arrow::ipc::MakeFileWriter(d_parquet->write(), result.ValueOrDie()->schema()).ValueOrDie());
+                // Convert to record batch
+                std::shared_ptr<arrow::RecordBatch> record_batch = result.ValueOrDie();
 
-                // Write the record batch.
-                arrow::Status st = ipc_writer->WriteRecordBatch(*result.ValueOrDie());
+                // Choose compression 
+                // TO DO let the user choose a compression
+                std::shared_ptr<parquet::WriterProperties> props = parquet::WriterProperties::Builder().compression(arrow::Compression::UNCOMPRESSED)->build();
+
+                // Opt to store Arrow schema for easier reads back into Arrow
+                std::shared_ptr<parquet::ArrowWriterProperties> arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
+
+                // Create a writer
+                std::unique_ptr<parquet::arrow::FileWriter> writer;
+                ::arrow::Schema schema = *(d_parquet->getSchema().get());
+                arrow::Status st = parquet::arrow::FileWriter::Open(schema, arrow::default_memory_pool(), d_parquet->write(), props, arrow_props, &writer);
 
                 if(!st.ok())
-                    failx("Parquet Error: %s", st.message().c_str());
+                    failx("error opening FileWriter, %s", st.message().c_str());
 
-                st = ipc_writer->Close();
+                // Write each batch as a row_groups
+                arrow::Result<std::shared_ptr<arrow::Table>> table = arrow::Table::FromRecordBatches(d_parquet->getSchema(), {record_batch});
+
+                st = writer->WriteTable(*table.ValueOrDie().get(), record_batch->num_rows());
 
                 if(!st.ok())
-                    failx("Parquet Error: %s", st.message().c_str());
+                    failx("error writing table to file, %s", st.message().c_str());
+                // // Set up RecordBatchWriter
+                // std::shared_ptr<arrow::ipc::RecordBatchWriter> ipc_writer = std::move(arrow::ipc::MakeFileWriter(d_parquet->write(), result.ValueOrDie()->schema()).ValueOrDie());
+
+                // // Write the record batch.
+                // arrow::Status st = ipc_writer->WriteRecordBatch(*result.ValueOrDie());
+
+                // if(!st.ok())
+                //     failx("Parquet Error: %s", st.message().c_str());
+
+                // st = ipc_writer->Close();
+
+                // if(!st.ok())
+                //     failx("Parquet Error: %s", st.message().c_str());
             }
         }
 

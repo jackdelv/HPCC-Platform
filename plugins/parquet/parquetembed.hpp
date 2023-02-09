@@ -760,7 +760,7 @@ namespace parquetembed
                 }
                 else
                 {
-                    arrow::MemoryPool* pool = arrow::default_memory_pool();
+                    // arrow::MemoryPool* pool = arrow::default_memory_pool();
 
                     //   // Configure general Parquet reader settings
                     //   auto reader_properties = parquet::ReaderProperties(pool);
@@ -1015,7 +1015,7 @@ namespace parquetembed
                         }  
                         break;
                     case type_real:
-                        arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::float16()));
+                        arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::float64()));
                         break;
                     case type_string:
                         arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));

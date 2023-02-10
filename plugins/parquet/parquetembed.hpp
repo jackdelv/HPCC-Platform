@@ -664,9 +664,18 @@ namespace parquetembed
                 {
                     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
 
-                    // parquet::WriterProperties::Builder builder;
+                    // Choose compression 
+                    // TO DO let the user choose a compression
+                    std::shared_ptr<parquet::WriterProperties> props = parquet::WriterProperties::Builder().compression(arrow::Compression::UNCOMPRESSED)->build();
 
-                    // parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
+                    // Opt to store Arrow schema for easier reads back into Arrow
+                    std::shared_ptr<parquet::ArrowWriterProperties> arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
+
+                    // Create a writer
+                    arrow::Status st = parquet::arrow::FileWriter::Open(*schema.get(), arrow::default_memory_pool(), outfile, props, arrow_props, &writer);
+
+                    if(!st.ok())
+                        failx("error opening FileWriter, %s", st.message().c_str());
                 }
                 return arrow::Status::OK();
             }
@@ -750,11 +759,11 @@ namespace parquetembed
             /**
              * @brief Returns a pointer to the stream writer for writing to the destination.
              * 
-             * @return std::shared_ptr<parquet::StreamWriter> 
+             * @return  
              */
-            std::shared_ptr<arrow::io::FileOutputStream> write()
+            std::unique_ptr<parquet::arrow::FileWriter> * write()
             {
-                return outfile;
+                return &writer;
             }
 
             rapidjson::Document * doc()
@@ -764,10 +773,8 @@ namespace parquetembed
 
             void update_row()
             {
-                if(current_row == row_size)
+                if(++current_row == row_size)
                     current_row = 0;
-                else
-                    current_row++;
             }
 
             std::vector<rapidjson::Document> * record_batch()
@@ -1087,7 +1094,8 @@ namespace parquetembed
             std::string p_destination;                                          //! Destination to write parquet file to.
             std::string p_partDir;                                              //! Directory to create for writing partitioned files.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
-            std::shared_ptr<arrow::Schema> schema;                 
+            std::shared_ptr<arrow::Schema> schema;
+            std::unique_ptr<parquet::arrow::FileWriter> writer;                 
             std::vector<rapidjson::Document> parquet_doc;                       //! Document for converting rows to columns for writing to parquet files.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
@@ -1290,41 +1298,13 @@ namespace parquetembed
                 // Convert to record batch
                 std::shared_ptr<arrow::RecordBatch> record_batch = result.ValueOrDie();
 
-                // Choose compression 
-                // TO DO let the user choose a compression
-                std::shared_ptr<parquet::WriterProperties> props = parquet::WriterProperties::Builder().compression(arrow::Compression::UNCOMPRESSED)->build();
-
-                // Opt to store Arrow schema for easier reads back into Arrow
-                std::shared_ptr<parquet::ArrowWriterProperties> arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
-
-                // Create a writer
-                std::unique_ptr<parquet::arrow::FileWriter> writer;
-                ::arrow::Schema schema = *(d_parquet->getSchema().get());
-                arrow::Status st = parquet::arrow::FileWriter::Open(schema, arrow::default_memory_pool(), d_parquet->write(), props, arrow_props, &writer);
-
-                if(!st.ok())
-                    failx("error opening FileWriter, %s", st.message().c_str());
-
                 // Write each batch as a row_groups
                 arrow::Result<std::shared_ptr<arrow::Table>> table = arrow::Table::FromRecordBatches(d_parquet->getSchema(), {record_batch});
 
-                st = writer->WriteTable(*table.ValueOrDie().get(), record_batch->num_rows());
+                arrow::Status st = d_parquet->write()->get()->WriteTable(*table.ValueOrDie().get(), record_batch->num_rows());
 
                 if(!st.ok())
                     failx("error writing table to file, %s", st.message().c_str());
-                // // Set up RecordBatchWriter
-                // std::shared_ptr<arrow::ipc::RecordBatchWriter> ipc_writer = std::move(arrow::ipc::MakeFileWriter(d_parquet->write(), result.ValueOrDie()->schema()).ValueOrDie());
-
-                // // Write the record batch.
-                // arrow::Status st = ipc_writer->WriteRecordBatch(*result.ValueOrDie());
-
-                // if(!st.ok())
-                //     failx("Parquet Error: %s", st.message().c_str());
-
-                // st = ipc_writer->Close();
-
-                // if(!st.ok())
-                //     failx("Parquet Error: %s", st.message().c_str());
             }
         }
 
@@ -1352,15 +1332,13 @@ namespace parquetembed
                 int i = 1;
                 int row_size = d_parquet->getMaxRowSize();
                 for(; bindNext(); d_parquet->update_row(), i++)
-                {
-                    assert((*d_parquet->record_batch())[i-1].IsObject());
-                    
+                {   
                     if (i % row_size == 0) 
                     {
                         writeRecordBatch(d_parquet->record_batch());
                     }
                 }
-                assert((*d_parquet->record_batch())[i-2].IsObject());
+
                 if(--i % row_size != 0)
                 {
                     d_parquet->record_batch()->resize(i % row_size);

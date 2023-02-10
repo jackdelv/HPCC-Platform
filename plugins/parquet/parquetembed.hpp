@@ -721,9 +721,18 @@ namespace parquetembed
                 {
                     PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
 
-                    // parquet::WriterProperties::Builder builder;
+                    // Choose compression 
+                    // TO DO let the user choose a compression
+                    std::shared_ptr<parquet::WriterProperties> props = parquet::WriterProperties::Builder().compression(arrow::Compression::UNCOMPRESSED)->build();
 
-                    // parquet_write = std::make_shared<parquet::StreamWriter>(parquet::ParquetFileWriter::Open(outfile, schema, builder.build()));
+                    // Opt to store Arrow schema for easier reads back into Arrow
+                    std::shared_ptr<parquet::ArrowWriterProperties> arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
+
+                    // Create a writer
+                    arrow::Status st = parquet::arrow::FileWriter::Open(*schema.get(), arrow::default_memory_pool(), outfile, props, arrow_props, &writer);
+
+                    if(!st.ok())
+                        failx("error opening FileWriter, %s", st.message().c_str());
                 }
                 return arrow::Status::OK();
             }
@@ -807,11 +816,11 @@ namespace parquetembed
             /**
              * @brief Returns a pointer to the stream writer for writing to the destination.
              * 
-             * @return std::shared_ptr<parquet::StreamWriter> 
+             * @return  
              */
-            std::shared_ptr<arrow::io::FileOutputStream> write()
+            std::unique_ptr<parquet::arrow::FileWriter> * write()
             {
-                return outfile;
+                return &writer;
             }
 
             rapidjson::Document * doc()
@@ -821,10 +830,8 @@ namespace parquetembed
 
             void update_row()
             {
-                if(current_row == row_size)
+                if(++current_row == row_size)
                     current_row = 0;
-                else
-                    current_row++;
             }
 
             std::vector<rapidjson::Document> * record_batch()
@@ -1144,7 +1151,8 @@ namespace parquetembed
             std::string p_destination;                                          //! Destination to write parquet file to.
             std::string p_partDir;                                              //! Directory to create for writing partitioned files.
             parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
-            std::shared_ptr<arrow::Schema> schema;                 
+            std::shared_ptr<arrow::Schema> schema;
+            std::unique_ptr<parquet::arrow::FileWriter> writer;                 
             std::vector<rapidjson::Document> parquet_doc;                       //! Document for converting rows to columns for writing to parquet files.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.

@@ -124,10 +124,10 @@ namespace parquetembed
     }
 
     const void* ParquetRowStream::nextRow()
-    {
-        arrow::Result<rapidjson::Document> row = s_parquet->next();
-        if (m_shouldRead && m_currentRow < numRows)
+    {   
+        if (m_shouldRead && s_parquet->shouldRead())
         {
+            arrow::Result<rapidjson::Document> row = s_parquet->next();
             rapidjson::Document doc = std::move(row).ValueUnsafe();
             rapidjson::StringBuffer buffer;
             rapidjson::Writer<rapidjson::StringBuffer> writer(buffer);

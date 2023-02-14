@@ -830,14 +830,23 @@ namespace parquetembed
                     PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::Table> table, scanner->ToTable());
                     numRows = table->num_rows();
                     parquet_table = table;
+
                 }
                 else
                 {
                     // Change this to be called multiple times and each time set the parquet_table as the next record batch.
-                    std::shared_ptr<arrow::Table> out;
-                    PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
-                    numRows = out->num_rows();
-                    parquet_table = out;
+                    // std::shared_ptr<arrow::Table> out;
+                    // PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
+                    // numRows = out->num_rows();
+                    // parquet_table = out;
+                    currentRowGroup = 0;
+                    current_read_row = 0;
+                    numRowGroups = parquet_read->num_row_groups();
+                    arrow::Status st = parquet_read->ReadRowGroup(currentRowGroup++, &parquet_table);
+                    if(!st.ok())
+                        failx("Error reading Row group number %d out of %d groups; %s", currentRowGroup, numRowGroups, st.message().c_str());
+
+                    numRows = parquet_table->num_rows();
                 }
             }
 
@@ -872,6 +881,11 @@ namespace parquetembed
                 {
                     return 'r';
                 }
+            }
+
+            bool shouldRead()
+            {
+                return !((currentRowGroup == numRowGroups) && (current_read_row == numRows));
             }
 
             // Convert a single batch of Arrow data into Documents
@@ -941,6 +955,22 @@ namespace parquetembed
 
             arrow::Result<rapidjson::Document> next()
             {
+                if(current_read_row == numRows)
+                {
+                    // Get new table
+                    arrow::Status st = parquet_read->ReadRowGroup(currentRowGroup, &parquet_table);
+                    if(!st.ok())
+                        failx("Error reading Row group number %d out of %d groups; %s", (currentRowGroup + 1), numRowGroups, st.message().c_str());
+                    numRows = parquet_table->num_rows();
+                    // Convert to iterator
+                    setIterator();
+
+                    current_read_row = 0;
+                    currentRowGroup++;
+                }
+
+                current_read_row++;
+
                 return output.Next();
             }
 
@@ -1116,7 +1146,10 @@ namespace parquetembed
         private:
             int current_row;
             int row_size;                                                       //! The maximum size of each parquet row group.
+            int currentRowGroup;
+            int numRowGroups;                                                   //! The number of row groups in the file that was opened for reading.
             size_t batch_size;                                                  //! batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
+            int current_read_row;
             int64_t numRows;                                                    //! The number of result rows that are read from the parquet file. 
             bool partition;                                                     //! Boolean variable to track whether we are writing partitioned files or not.
             std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.

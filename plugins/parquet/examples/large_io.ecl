@@ -14,7 +14,7 @@ layout := RECORD
     INTEGER author_id;
     INTEGER pr_id;
     INTEGER c_id;
-	INTEGER commit_date;
+    INTEGER commit_date;
 END;
 
 #IF(0)

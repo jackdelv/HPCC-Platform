@@ -612,16 +612,10 @@ namespace parquetembed
             }
 
             /**
-             * @brief Get the Schema object 
+             * @brief Get the Schema shared pointer 
              * 
-             * @return std::shared_ptr<parquet::schema::GroupNode> Shared_ptr of schema object for building the write stream.
+             * @return std::shared_ptr<arrow::Schema> Shared_ptr of schema object for building the write stream.
              */
-            std::shared_ptr<parquet::schema::GroupNode> getSchema(parquet::schema::NodeVector nodes)
-            {
-                return std::static_pointer_cast<parquet::schema::GroupNode>(
-                    parquet::schema::GroupNode::Make("schema", parquet::Repetition::REQUIRED, nodes));
-            }
-
             std::shared_ptr<arrow::Schema> getSchema()
             {
                 return schema;
@@ -779,11 +773,6 @@ namespace parquetembed
                 }
                 else
                 {
-                    // Change this to be called multiple times and each time set the parquet_table as the next record batch.
-                    // std::shared_ptr<arrow::Table> out;
-                    // PARQUET_THROW_NOT_OK(parquet_read->ReadTable(&out));
-                    // numRows = out->num_rows();
-                    // parquet_table = out;
                     currentRowGroup = 0;
                     current_read_row = 0;
                     numRowGroups = parquet_read->num_row_groups();
@@ -993,6 +982,7 @@ namespace parquetembed
                     case type_decimal: 
                         // The second parameter, scale, is the number of digits after the decimal point.
                         // I am not sure if the eclhelper function getDecimalDigits() returns the digits after the decimal point or the total digits.
+                        // TO DO
                         arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::decimal128(field->type->getDecimalPrecision(), field->type->getDecimalDigits())));
                         break;    
                     // case type_record:      

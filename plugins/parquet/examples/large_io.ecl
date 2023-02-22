@@ -1,8 +1,7 @@
 IMPORT STD;
 IMPORT Parquet;
 
-#OPTION('outputLimit', 2000);
-#OPTION('pickBestEngine', FALSE);
+// #OPTION('outputLimit', 20000);
 
 layout := RECORD
     STRING actor_login;
@@ -15,15 +14,21 @@ layout := RECORD
     INTEGER author_id;
     INTEGER pr_id;
     INTEGER c_id;
-    INTEGER commit_date;
+	INTEGER commit_date;
 END;
 
 #IF(0)
-csv_data := DATASET('~parquet::large::ghtorrent-2019-02-04.csv', layout, CSV(HEADING(1)));
-Write(csv_data, '/datadrive/dev/test_data/ghtorrent-2019-02-04.parquet');
+write_rec(streamed DATASET(layout) sd) := EMBED(parquet: activity, option('write'), destination('/home/hpccuser/dev/test_data/ghtorrent-2019-01-07.parquet'))
+ENDEMBED;
+
+csv_data := DATASET('~test::parquet::ghtorrent-2019-01-07.csv', layout, CSV(HEADING(1)));
+write_rec(csv_data);
 #END
 
 #IF(1)
-parquet_data := Read(layout, '/datadrive/dev/test_data/ghtorrent-2019-01-07.parquet');
-OUTPUT(CHOOSEN(parquet_data, 1000000), NAMED('ghtorrent_2019_01_07'));
+DATASET(layout) read_rec() := EMBED(parquet: option('read'), location('/home/hpccuser/dev/test_data/ghtorrent-2019-01-07.parquet'))
+ENDEMBED;
+
+parquet_data := read_rec();
+OUTPUT(CHOOSEN(parquet_data, 2500), NAMED('ghtorrent_2019_01_07'));
 #END

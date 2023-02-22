@@ -66,8 +66,6 @@ extern "C" PARQUETEMBED_PLUGIN_API bool getECLPluginDefinition(ECLPluginDefiniti
 
 namespace parquetembed
 {
-    static rapidjson::MemoryPoolAllocator<> jsonAlloc;
-
     //--------------------------------------------------------------------------
     // Plugin Classes
     //--------------------------------------------------------------------------

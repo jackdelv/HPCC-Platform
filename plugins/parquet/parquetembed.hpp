@@ -51,6 +51,8 @@
 
 namespace parquetembed
 {
+    static rapidjson::MemoryPoolAllocator<> jsonAlloc;
+
     extern void UNSUPPORTED(const char *feature) __attribute__((noreturn));
     extern void failx(const char *msg, ...) __attribute__((noreturn))  __attribute__((format(printf, 1, 2)));
     extern void fail(const char *msg) __attribute__((noreturn));
@@ -1342,6 +1344,7 @@ namespace parquetembed
                     if (i % row_size == 0) 
                     {
                         writeRecordBatch(d_parquet->record_batch());
+                        parquetembed::jsonAlloc.Clear();
                     }
                 }
 
@@ -1349,6 +1352,7 @@ namespace parquetembed
                 {
                     d_parquet->record_batch()->resize(i % row_size);
                     writeRecordBatch(d_parquet->record_batch());
+                    parquetembed::jsonAlloc.Clear();
                 }
             }
         }

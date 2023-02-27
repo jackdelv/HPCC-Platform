@@ -15,9 +15,6 @@
 
 #include "arrow/result.h"
 
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
-
 // #include <map>
 // #include <mutex>
 // #include <thread>
@@ -930,118 +927,6 @@ namespace parquetembed
     void ParquetRecordBinder::processUtf8(unsigned chars, const char *value, const RtlFieldInfo * field)
     {
         bindUtf8Param(chars, value, field, r_parquet);
-    }
-
-    /**
-     * @brief Gets all the field types from the RtlTypeInfo object and adds them to the schema.
-     * 
-     * @param typeInfo Object holding meta information about the record.
-     */
-    void ParquetDatasetBinder::getFieldTypes(const RtlTypeInfo *typeInfo)
-    {
-        const RtlFieldInfo * const *fields = typeInfo->queryFields();
-        assertex(fields);
-        while (*fields){
-            const char * name = (*fields)->name;
-            enum parquet::Type::type type;
-            enum parquet::ConvertedType::type ctype;
-            int wlength = -1;  // Writing length that gets passed to schema
-            unsigned len = (*fields)->type->length;
-            switch((*fields)->type->getType())
-            {
-                case type_boolean:
-                    type = parquet::Type::BOOLEAN;
-                    ctype = parquet::ConvertedType::NONE;
-                    break;
-                case type_int:
-                    if(len > 4)
-                    {
-                        type = parquet::Type::INT64;
-                        ctype = parquet::ConvertedType::INT_64;
-                    }
-                    else if(len > 2)
-                    {
-                        type = parquet::Type::INT32;
-                        ctype = parquet::ConvertedType::INT_32;
-                    }
-                    else if(len > 1)
-                    {
-                        type = parquet::Type::INT32;
-                        ctype = parquet::ConvertedType::INT_16;
-                    }
-                    else
-                    {
-                        type = parquet::Type::INT32;
-                        ctype = parquet::ConvertedType::INT_8;
-                    } 
-                    break;
-                case type_unsigned:
-                    if(len > 4)
-                    {
-                        type = parquet::Type::INT64;
-                        ctype = parquet::ConvertedType::UINT_64;
-                    }
-                    else if(len > 2)
-                    {
-                        type = parquet::Type::INT32;
-                        ctype = parquet::ConvertedType::UINT_32;
-                    }
-                    else if(len > 1)
-                    {
-                        type = parquet::Type::INT32;
-                        ctype = parquet::ConvertedType::UINT_16;
-                    }
-                    else
-                    {
-                        type = parquet::Type::INT32;
-                        ctype = parquet::ConvertedType::UINT_8;
-                    } 
-                    break;
-                case type_real:
-                    type = parquet::Type::DOUBLE;
-                    ctype = parquet::ConvertedType::NONE;
-                    break;
-                case type_decimal:
-                    type = parquet::Type::BYTE_ARRAY;
-                    ctype = parquet::ConvertedType::DECIMAL;
-                    break;
-                case type_string:
-                    type = parquet::Type::BYTE_ARRAY;
-                    ctype = parquet::ConvertedType::UTF8;
-                    break;
-                case type_char:
-                    type = parquet::Type::FIXED_LEN_BYTE_ARRAY;
-                    ctype = parquet::ConvertedType::NONE;
-                    wlength = (*fields)->type->length;
-                    break;
-                case type_varstring:
-                    type = parquet::Type::BYTE_ARRAY;
-                    ctype = parquet::ConvertedType::UTF8;
-                    break;
-                case type_set:
-                    // Do something with arrow::ListType
-                    break;
-                case type_record:
-                case type_row:
-                    // Do something with arrow::MapType
-                    break;
-                case type_qstring:
-                    type = parquet::Type::BYTE_ARRAY;
-                    ctype = parquet::ConvertedType::UTF8;
-                    break;
-                case type_unicode:
-                    UNSUPPORTED("UNICODE datatype");
-                    break;
-                case type_utf8:
-                    type = parquet::Type::BYTE_ARRAY;
-                    ctype = parquet::ConvertedType::UTF8;
-                    break;
-                default:
-                    failx("Datatype %i is not compatible with this plugin.", (*fields)->type->getType());
-            }
-            d_parquet->addField(name, parquet::Repetition::REQUIRED, type, ctype, wlength);
-            fields++;
-        }
     }
 
     /**

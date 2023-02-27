@@ -19,9 +19,6 @@
 
 #include "arrow/result.h"
 
-#include "rapidjson/writer.h"
-#include "rapidjson/stringbuffer.h"
-
 // #include <map>
 // #include <mutex>
 // #include <thread>

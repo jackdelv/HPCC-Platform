@@ -35,6 +35,7 @@
 
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
+#include "rapidjson/writer.h"
 
 // Platform includes
 #include "hqlplugins.hpp"
@@ -654,19 +655,6 @@ namespace parquetembed
             }
 
             /**
-             * @brief Adds a new field to the schema for writing a parquet file.
-             * 
-             * @param name Name of the field to be written.
-             * @param repetition Repetition setting of the field.
-             * @param type Data type of the field.
-             * @param ctype Converted Data Type of the field.
-             */
-            void addField(const char *name, enum parquet::Repetition::type repetition, parquet::Type::type type, enum parquet::ConvertedType::type ctype, int length)
-            {
-                fields.push_back(parquet::schema::PrimitiveNode::Make(name, repetition, type, ctype, length));
-            }
-
-            /**
              * @brief Get the Schema shared pointer 
              * 
              * @return std::shared_ptr<arrow::Schema> Shared_ptr of schema object for building the write stream.
@@ -790,9 +778,9 @@ namespace parquetembed
                 return &writer;
             }
 
-            rapidjson::Document * doc()
+            rapidjson::Value * doc()
             {
-                return &parquet_doc[current_row];
+                return &row_stack[row_stack.size() - 1];
             }
 
             void update_row()
@@ -968,6 +956,23 @@ namespace parquetembed
                 return numRows;
             }
 
+            std::shared_ptr<arrow::StructType> makeChildRecord(const RtlFieldInfo *field)
+            {
+                const RtlTypeInfo * typeInfo = field->type;
+                const RtlFieldInfo * const *fields = typeInfo->queryFields();
+                int count = countFields(typeInfo);
+
+                std::vector<std::shared_ptr<arrow::Field>> child_fields;
+
+                for (int i = 0; i < count; i++, fields++) 
+                {
+                    if(!FieldToNode((*fields)->name, *fields, child_fields).ok())
+                        failx("Error creating child record.");
+                }
+
+                return std::make_shared<arrow::StructType>(child_fields);
+            }
+
             arrow::Status FieldToNode(const std::string& name, const RtlFieldInfo *field, std::vector<std::shared_ptr<arrow::Field>> &arrow_fields) 
             {
                 unsigned len = field->type->length;
@@ -1040,7 +1045,9 @@ namespace parquetembed
                         // TO DO
                         arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::decimal128(field->type->getDecimalPrecision(), field->type->getDecimalDigits())));
                         break;    
-                    // case type_record:      
+                    case type_record:
+                        arrow_fields.push_back(std::make_shared<arrow::Field>(name, makeChildRecord(field)));
+                        break;      
                     // case type_row:
                     //     arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::map()));    
                     // case type_set: 
@@ -1121,16 +1128,42 @@ namespace parquetembed
                 int count = countFields(typeInfo);
 
                 std::vector<std::shared_ptr<arrow::Field>> arrow_fields;
-                std::string field_string;
 
                 for (int i = 0; i < count; i++, fields++) 
                 {
                     RETURN_NOT_OK(FieldToNode((*fields)->name, *fields, arrow_fields));
-                    field_string = arrow_fields[i]->ToString();
                 }
 
                 schema = std::make_shared<arrow::Schema>(arrow_fields);
                 return arrow::Status::OK();
+            }
+
+            void begin_row()
+            {
+                rapidjson::Value row(rapidjson::kObjectType);
+                row_stack.push_back(std::move(row));
+            }
+
+            void end_row(const char * name)
+            {
+                if(row_stack.size() > 1)
+                {
+                    rapidjson::Value child = std::move(row_stack[row_stack.size() - 1]);
+                    row_stack.pop_back();
+                    row_stack[row_stack.size() - 1].AddMember(rapidjson::StringRef(name), child, jsonAlloc);
+                }
+                else
+                {
+                    parquet_doc[current_row].SetObject();
+
+                    rapidjson::Value parent = std::move(row_stack[row_stack.size() - 1]);
+                    row_stack.pop_back();
+
+                    for (auto itr = parent.MemberBegin(); itr != parent.MemberEnd(); ++itr)
+                    {
+                        parquet_doc[current_row].AddMember(itr->name, itr->value, jsonAlloc);
+                    }
+                }
             }
 
         private:
@@ -1146,10 +1179,10 @@ namespace parquetembed
             std::string p_location;                                             //! Location to read parquet file from.
             std::string p_destination;                                          //! Destination to write parquet file to.
             std::string p_partDir;                                              //! Directory to create for writing partitioned files.
-            parquet::schema::NodeVector fields;                                 //! Schema vector for appending the information of each field.
             std::shared_ptr<arrow::Schema> schema;
             std::unique_ptr<parquet::arrow::FileWriter> writer;                 
-            std::vector<rapidjson::Document> parquet_doc;                       //! Document for converting rows to columns for writing to parquet files.
+            std::vector<rapidjson::Document> parquet_doc;                       //! Document vector for converting rows to columns for writing to parquet files.
+            std::vector<rapidjson::Value> row_stack;                            //! Stack for keeping track of the context when building a nested row.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
             std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
@@ -1334,9 +1367,6 @@ namespace parquetembed
          */
         bool bindNext()
         {
-            // Instantiate Document object
-            d_parquet->doc()->SetObject();
-
             roxiemem::OwnedConstRoxieRow nextRow = (const byte *) input->ungroupedNextRow();
             if (!nextRow)
                 return false;

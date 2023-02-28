@@ -594,6 +594,10 @@ namespace parquetembed
         row_stack.push_back(std::move(row));
     }
 
+    /**
+    * @brief Removes the value from the top of the stack and adds it the parent row.
+    * If there is only one value on the stack then it converts it to a rapidjson::Document.
+    */
     void ParquetHelper::end_row(const char *name)
     {
         if (row_stack.size() > 1)

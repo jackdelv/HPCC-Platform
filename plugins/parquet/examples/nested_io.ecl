@@ -12,7 +12,7 @@ parentRec := RECORD
     childRec details;
 END; 
 nested_dataset := DATASET([{'Jack', 'Jackson', {22, 5.9, 600}}, {'John', 'Johnson', {17, 6.3, 18}}, 
-                                {'Amy', 'Amyson', {59, 5.9, 59}}, {'Grace', 'Graceson', {11, 7.9, 100}}], parentRec);
+                                {'Amy', 'Amyson', {59, 3.9, 59}}, {'Grace', 'Graceson', {11, 7.9, 100}}], parentRec);
 
 write_rec(dataset(parentRec) sd) := EMBED(parquet: option('write'), MaxRowSize(2), destination('/home/hpccuser/dev/test_data/nested.parquet'))
 ENDEMBED;

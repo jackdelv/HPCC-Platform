@@ -558,6 +558,9 @@ namespace parquetembed
         return arrow::Status::OK();
     }
 
+    /**
+    * @brief counts the number of fields in the input dataset
+    */
     int ParquetHelper::countFields(const RtlTypeInfo *typeInfo)
     {
         const RtlFieldInfo *const *fields = typeInfo->queryFields();

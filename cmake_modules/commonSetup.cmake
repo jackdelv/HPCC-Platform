@@ -191,7 +191,10 @@ IF ("${COMMONSETUP_DONE}" STREQUAL "")
     ECLBLAS
     MONGODBEMBED
     PARQUETEMBED
+<<<<<<< HEAD
 >>>>>>> Initial commit
+=======
+>>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
     EXAMPLEPLUGIN)
     foreach(plugin ${PLUGINS_LIST})
         option(${plugin} "Create a package with ONLY the ${plugin} plugin" OFF)

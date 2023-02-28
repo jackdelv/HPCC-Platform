@@ -9,17 +9,23 @@
 			"-DCONTAINERIZED=OFF",
 			"-DUSE_OPTIONAL=OFF",
 <<<<<<< HEAD
+<<<<<<< HEAD
 			"-DINCLUDE_PLUGINS=ON",
 			"-DSUPPRESS_V8EMBED=ON",
 			"-DSUPPRESS_REMBED=ON"
 =======
+=======
+>>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 			"-DINCLUDE_PLUGINS=OFF",
 			"-DINCLUDE_PARQUETEMBED=ON",
 			"-DCMAKE_BUILD_TYPE=Debug",
 			"-DUSE_LIBMEMCACHED=OFF",
 			"-DUSE_NUMA=OFF",
 			"-DUSE_ICU=ON"
+<<<<<<< HEAD
 >>>>>>> Not sure what this does.
+=======
+>>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 		],
 		"editor.formatOnSave": false,
 		"files.associations": {

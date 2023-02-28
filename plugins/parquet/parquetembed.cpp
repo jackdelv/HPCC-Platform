@@ -559,6 +559,11 @@ namespace parquetembed
         return count;
     }
 
+    /**
+    * @brief Creates an arrow::Schema from the field info of the row.
+    * @param typeInfo An RtlTypeInfo object that we iterate through to get all
+    * the information for the row.
+    */
     arrow::Status ParquetHelper::fieldsToSchema(const RtlTypeInfo *typeInfo)
     {
         const RtlFieldInfo *const *fields = typeInfo->queryFields();

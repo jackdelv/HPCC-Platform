@@ -575,6 +575,9 @@ namespace parquetembed
         return arrow::Status::OK();
     }
 
+    /**
+    * @brief Creates a rapidjson::Value and adds it to the stack
+    */
     void ParquetHelper::begin_row()
     {
         rapidjson::Value row(rapidjson::kObjectType);

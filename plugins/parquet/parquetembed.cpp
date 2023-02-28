@@ -12,8 +12,10 @@
 ############################################################################## */
 
 #include "parquetembed.hpp"
-
 #include "arrow/result.h"
+#include "parquet/arrow/reader.h"
+#include "parquet/arrow/schema.h"
+
 
 // #include <map>
 // #include <mutex>
@@ -103,6 +105,502 @@ namespace parquetembed
         StringBuffer msg;
         msg.appendf("%s: ", MODULE_NAME).append(message);
         rtlFail(0, msg.str());
+    }
+
+    /**
+     * @brief Simple constructor that stores the inputs from the user.
+     *
+     * @param option The read or write option.
+     *
+     * @param location The location to read a parquet file.
+     *
+     * @param destination The destination to write a parquet file.
+     *
+     * @param rowsize The max row group size when reading parquet files.
+     *
+     * @param _batchSize The size of the batches when converting parquet columns to rows.
+     */
+    ParquetHelper::ParquetHelper(const char *option, const char *location, const char *destination, const char *partDir, int rowsize, int _batchSize)
+    {
+        p_option = option;
+        p_location = location;
+        p_destination = destination;
+        p_partDir = partDir;
+        row_size = rowsize;
+        batch_size = _batchSize;
+
+        parquet_doc = std::vector<rapidjson::Document>(rowsize);
+        current_row = 0;
+
+        if (option[1])
+            partition = (option[1] == 'M' || option[1] == 'm');
+        else
+            partition = false;
+    }
+
+    /**
+     * @brief Get the Schema shared pointer
+     *
+     * @return std::shared_ptr<arrow::Schema> Shared_ptr of schema object for building the write stream.
+     */
+    std::shared_ptr<arrow::Schema> ParquetHelper::getSchema()
+    {
+        return schema;
+    }
+
+    /**
+     * @brief Opens the write stream with the schema and destination.
+     *
+     */
+    arrow::Status ParquetHelper::openWriteFile()
+    {
+        if (partition)
+        {
+            if (p_location == "")
+                failx("Cannot partition files because the location was not supplied.");
+            else if (p_partDir == "")
+                failx("Cannot partition files because the partition directory was not supplied.");
+
+            std::string uri = "file://" + p_location;
+            std::string base_path = p_location + p_partDir;
+            ARROW_ASSIGN_OR_RAISE(auto filesystem, arrow::fs::FileSystemFromUri(uri));
+
+            ARROW_RETURN_NOT_OK(filesystem->CreateDir(base_path));
+
+            // The partition schema determines which fields are part of the partitioning.
+            // TODO The schema needs to be user accesible.
+            auto partition_schema = arrow::schema({arrow::field("part", arrow::utf8())});
+
+            // Hive-style partitioning creates directories with "key=value" pairs.
+            // TODO need to allow for different partitioning types.
+            std::shared_ptr<arrow::dataset::HivePartitioning> partitioning = std::make_shared<arrow::dataset::HivePartitioning>(partition_schema);
+
+            std::shared_ptr<arrow::dataset::ParquetFileFormat> format = std::make_shared<arrow::dataset::ParquetFileFormat>();
+
+            write_options.file_write_options = format->DefaultWriteOptions();
+            write_options.filesystem = filesystem;
+            write_options.base_dir = base_path;
+            write_options.partitioning = partitioning;
+            write_options.basename_template = "part{i}.parquet";
+        }
+        else
+        {
+            std::shared_ptr<arrow::io::FileOutputStream> outfile;
+
+            PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(p_destination));
+
+            // Choose compression
+            // TO DO let the user choose a compression
+            std::shared_ptr<parquet::WriterProperties> props = parquet::WriterProperties::Builder().compression(arrow::Compression::UNCOMPRESSED)->build();
+
+            // Opt to store Arrow schema for easier reads back into Arrow
+            std::shared_ptr<parquet::ArrowWriterProperties> arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
+
+            // Create a writer
+            arrow::Status st = parquet::arrow::FileWriter::Open(*schema.get(), arrow::default_memory_pool(), outfile, props, arrow_props, &writer);
+
+            if (!st.ok())
+                failx("error opening FileWriter, %s", st.message().c_str());
+        }
+        return arrow::Status::OK();
+    }
+
+    /**
+     * @brief Opens the read stream with the schema and location.
+     *
+     */
+    void ParquetHelper::openReadFile()
+    {
+        if (partition)
+        {
+            // Create a filesystem
+            std::shared_ptr<arrow::fs::LocalFileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+            arrow::fs::FileSelector selector;
+            selector.base_dir = p_location; // The base directory to be searched is provided by the user in the location option.
+            selector.recursive = true;      // Selector will search the base path recursively for partitioned files.
+
+            // Create a file format
+            std::shared_ptr<arrow::dataset::ParquetFileFormat> format = std::make_shared<arrow::dataset::ParquetFileFormat>();
+
+            // Create the partitioning factory.
+            // TO DO look into other partioning types.
+            std::shared_ptr<arrow::dataset::PartitioningFactory> partitioning_factory = arrow::dataset::HivePartitioning::MakeFactory();
+
+            arrow::dataset::FileSystemFactoryOptions options;
+            options.partitioning = partitioning_factory;
+
+            // Create the dataset factory
+            PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::DatasetFactory> dataset_factory, arrow::dataset::FileSystemDatasetFactory::Make(fs, selector, format, options));
+
+            // Get dataset
+            PARQUET_ASSIGN_OR_THROW(dataset, dataset_factory->Finish());
+        }
+        else
+        {
+            std::shared_ptr<arrow::io::ReadableFile> infile;
+
+            PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
+
+            PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
+        }
+    }
+
+    arrow::Status ParquetHelper::writePartition(std::shared_ptr<arrow::Table> table)
+    {
+        // Create dataset for writing partitioned files.
+        std::shared_ptr<arrow::dataset::InMemoryDataset> dataset = std::make_shared<arrow::dataset::InMemoryDataset>(table);
+        ARROW_ASSIGN_OR_RAISE(auto scanner_builder, dataset->NewScan());
+        ARROW_ASSIGN_OR_RAISE(auto scanner, scanner_builder->Finish());
+
+        // Write partitioned files.
+        ARROW_RETURN_NOT_OK(arrow::dataset::FileSystemDataset::Write(write_options, scanner));
+    }
+
+    /**
+     * @brief Returns a pointer to the stream writer for writing to the destination.
+     *
+     * @return
+     */
+    std::unique_ptr<parquet::arrow::FileWriter> *ParquetHelper::write()
+    {
+        return &writer;
+    }
+
+    rapidjson::Value *ParquetHelper::doc()
+    {
+        return &row_stack[row_stack.size() - 1];
+    }
+
+    void ParquetHelper::update_row()
+    {
+        if (++current_row == row_size)
+            current_row = 0;
+    }
+
+    std::vector<rapidjson::Document> *ParquetHelper::record_batch()
+    {
+        return &parquet_doc;
+    }
+
+    /**
+     * @brief Sets the parquet_table member to the output of what is read from the given
+     * parquet file.
+     */
+    void ParquetHelper::read()
+    {
+        if (partition)
+        {
+            // This should be changed as well, so we can get a RecordBatchReader from the scanner rather than
+            // read it all into a single table.
+            // Create a scanner
+            arrow::dataset::ScannerBuilder scanner_builder(dataset);
+            PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
+
+            // Scan the dataset
+            PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::Table> table, scanner->ToTable());
+            numRows = table->num_rows();
+            parquet_table = table;
+        }
+        else
+        {
+            current_row_group = 0;
+            current_read_row = 0;
+            num_row_groups = parquet_read->num_row_groups();
+            arrow::Status st = parquet_read->ReadRowGroup(current_row_group++, &parquet_table);
+            if (!st.ok())
+                failx("Error reading Row group number %d out of %d groups; %s", current_row_group, num_row_groups, st.message().c_str());
+
+            numRows = parquet_table->num_rows();
+        }
+    }
+
+    /**
+     * @brief Returns a boolean so we know if we are writing partitioned files.
+     *
+     * @return true If we are partitioning.
+     * @return false If we are writing a single file.
+     */
+    bool ParquetHelper::partSetting()
+    {
+        return partition;
+    }
+
+    /**
+     * @brief Returns the maximum size of the row group set by the user. Default is 1000.
+     *
+     * @return int Maximum size of the row group.
+     */
+    int ParquetHelper::getMaxRowSize()
+    {
+        return row_size;
+    }
+
+    char ParquetHelper::options()
+    {
+        if (p_option[0] == 'W' || p_option[0] == 'w')
+        {
+            return 'w';
+        }
+        else if (p_option[0] == 'R' || p_option[0] == 'r')
+        {
+            return 'r';
+        }
+    }
+
+    bool ParquetHelper::shouldRead()
+    {
+        return !((current_row_group == num_row_groups) && (current_read_row == numRows));
+    }
+
+    // Convert a single batch of Arrow data into Documents
+    arrow::Result<std::vector<rapidjson::Document>> ParquetHelper::ConvertToVector(std::shared_ptr<arrow::RecordBatch> batch)
+    {
+        RowBatchBuilder builder{batch->num_rows()};
+
+        for (int i = 0; i < batch->num_columns(); ++i)
+        {
+            builder.SetField(batch->schema()->field(i).get());
+            ARROW_RETURN_NOT_OK(arrow::VisitArrayInline(*batch->column(i).get(), &builder));
+        }
+
+        return std::move(builder).Rows();
+    }
+
+    arrow::Iterator<rapidjson::Document> ParquetHelper::ConvertToIterator(std::shared_ptr<arrow::Table> table, size_t batch_size)
+    {
+        // Use TableBatchReader to divide table into smaller batches. The batches
+        // created are zero-copy slices with *at most* `batch_size` rows.
+        auto batch_reader = std::make_shared<arrow::TableBatchReader>(*table);
+        batch_reader->set_chunksize(batch_size);
+
+        auto read_batch = [this](const std::shared_ptr<arrow::RecordBatch> &batch) -> arrow::Result<arrow::Iterator<rapidjson::Document>>
+        {
+            ARROW_ASSIGN_OR_RAISE(auto rows, ConvertToVector(batch));
+            return arrow::MakeVectorIterator(std::move(rows));
+        };
+
+        auto nested_iter = arrow::MakeMaybeMapIterator(read_batch, arrow::MakeIteratorFromReader(std::move(batch_reader)));
+
+        return arrow::MakeFlattenIterator(std::move(nested_iter));
+    }
+
+    arrow::Result<std::shared_ptr<arrow::RecordBatch>> ParquetHelper::ConvertToRecordBatch(
+        const std::vector<rapidjson::Document> &rows, std::shared_ptr<arrow::Schema> schema)
+    {
+        // RecordBatchBuilder will create array builders for us for each field in our
+        // schema. By passing the number of output rows (`rows.size()`) we can
+        // pre-allocate the correct size of arrays, except of course in the case of
+        // string, byte, and list arrays, which have dynamic lengths.
+        std::unique_ptr<arrow::RecordBatchBuilder> batch_builder;
+        ARROW_ASSIGN_OR_RAISE(
+            batch_builder,
+            arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rows.size()));
+
+        // Inner converter will take rows and be responsible for appending values
+        // to provided array builders.
+        JsonValueConverter converter(rows);
+        for (int i = 0; i < batch_builder->num_fields(); ++i)
+        {
+            std::shared_ptr<arrow::Field> field = schema->field(i);
+            arrow::ArrayBuilder *builder = batch_builder->GetField(i);
+            ARROW_RETURN_NOT_OK(converter.Convert(*field.get(), builder));
+        }
+
+        std::shared_ptr<arrow::RecordBatch> batch;
+        ARROW_ASSIGN_OR_RAISE(batch, batch_builder->Flush());
+
+        // Use RecordBatch::ValidateFull() to make sure arrays were correctly constructed.
+        DCHECK_OK(batch->ValidateFull());
+        return batch;
+    }
+
+    void ParquetHelper::setIterator()
+    {
+        output = ConvertToIterator(parquet_table, batch_size);
+    }
+
+    arrow::Result<rapidjson::Document> ParquetHelper::next()
+    {
+        if (current_read_row == numRows)
+        {
+            // Get new table
+            arrow::Status st = parquet_read->ReadRowGroup(current_row_group, &parquet_table);
+            if (!st.ok())
+                failx("Error reading Row group number %d out of %d groups; %s", (current_row_group + 1), num_row_groups, st.message().c_str());
+            numRows = parquet_table->num_rows();
+            // Convert to iterator
+            setIterator();
+
+            current_read_row = 0;
+            current_row_group++;
+        }
+
+        current_read_row++;
+
+        return output.Next();
+    }
+
+    int64_t ParquetHelper::num_rows()
+    {
+        return numRows;
+    }
+
+    std::shared_ptr<arrow::StructType> ParquetHelper::makeChildRecord(const RtlFieldInfo *field)
+    {
+        const RtlTypeInfo *typeInfo = field->type;
+        const RtlFieldInfo *const *fields = typeInfo->queryFields();
+        int count = countFields(typeInfo);
+
+        std::vector<std::shared_ptr<arrow::Field>> child_fields;
+
+        for (int i = 0; i < count; i++, fields++)
+        {
+            if (!FieldToNode((*fields)->name, *fields, child_fields).ok())
+                failx("Error creating child record.");
+        }
+
+        return std::make_shared<arrow::StructType>(child_fields);
+    }
+
+    arrow::Status ParquetHelper::FieldToNode(const std::string &name, const RtlFieldInfo *field, std::vector<std::shared_ptr<arrow::Field>> &arrow_fields)
+    {
+        unsigned len = field->type->length;
+
+        switch (field->type->getType())
+        {
+        case type_boolean:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::boolean()));
+            break;
+        case type_int:
+            if (len > 4)
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int64()));
+            }
+            else if (len > 2)
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int32()));
+            }
+            else if (len > 1)
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int16()));
+            }
+            else
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int8()));
+            }
+            break;
+        case type_unsigned:
+            if (len > 4)
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint64()));
+            }
+            else if (len > 2)
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint32()));
+            }
+            else if (len > 1)
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint16()));
+            }
+            else
+            {
+                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint8()));
+            }
+            break;
+        case type_real:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::float64()));
+            break;
+        case type_string:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
+            break;
+        case type_char:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
+            break;
+        case type_varstring:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
+            break;
+        case type_qstring:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
+            break;
+        case type_unicode:
+            UNSUPPORTED("UNICODE datatype");
+            break;
+        case type_utf8:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
+            break;
+        case type_decimal:
+            // The second parameter, scale, is the number of digits after the decimal point.
+            // I am not sure if the eclhelper function getDecimalDigits() returns the digits after the decimal point or the total digits.
+            // TO DO
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::decimal128(field->type->getDecimalPrecision(), field->type->getDecimalDigits())));
+            break;
+        case type_record:
+            arrow_fields.push_back(std::make_shared<arrow::Field>(name, makeChildRecord(field)));
+            break;
+        // case type_row:
+        //     arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::map()));
+        // case type_set:
+        //     arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::list()));
+        default:
+            failx("Datatype %i is not compatible with this plugin.", field->type->getType());
+        }
+
+        return arrow::Status::OK();
+    }
+
+    int ParquetHelper::countFields(const RtlTypeInfo *typeInfo)
+    {
+        const RtlFieldInfo *const *fields = typeInfo->queryFields();
+        int count = 0;
+        assertex(fields);
+        while (*fields++)
+            count++;
+
+        return count;
+    }
+
+    arrow::Status ParquetHelper::fieldsToSchema(const RtlTypeInfo *typeInfo)
+    {
+        const RtlFieldInfo *const *fields = typeInfo->queryFields();
+        int count = countFields(typeInfo);
+
+        std::vector<std::shared_ptr<arrow::Field>> arrow_fields;
+
+        for (int i = 0; i < count; i++, fields++)
+        {
+            RETURN_NOT_OK(FieldToNode((*fields)->name, *fields, arrow_fields));
+        }
+
+        schema = std::make_shared<arrow::Schema>(arrow_fields);
+        return arrow::Status::OK();
+    }
+
+    void ParquetHelper::begin_row()
+    {
+        rapidjson::Value row(rapidjson::kObjectType);
+        row_stack.push_back(std::move(row));
+    }
+
+    void ParquetHelper::end_row(const char *name)
+    {
+        if (row_stack.size() > 1)
+        {
+            rapidjson::Value child = std::move(row_stack[row_stack.size() - 1]);
+            row_stack.pop_back();
+            row_stack[row_stack.size() - 1].AddMember(rapidjson::StringRef(name), child, jsonAlloc);
+        }
+        else
+        {
+            parquet_doc[current_row].SetObject();
+
+            rapidjson::Value parent = std::move(row_stack[row_stack.size() - 1]);
+            row_stack.pop_back();
+
+            for (auto itr = parent.MemberBegin(); itr != parent.MemberEnd(); ++itr)
+            {
+                parquet_doc[current_row].AddMember(itr->name, itr->value, jsonAlloc);
+            }
+        }
     }
 
     ParquetRowStream::ParquetRowStream(IEngineRowAllocator* _resultAllocator, std::shared_ptr<ParquetHelper> _parquet)

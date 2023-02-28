@@ -36,6 +36,7 @@
 #include "rapidjson/document.h"
 #include "rapidjson/stringbuffer.h"
 #include "rapidjson/writer.h"
+#include "rapidjson/document.h"
 
 // Platform includes
 #include "hqlplugins.hpp"
@@ -1166,30 +1167,54 @@ namespace parquetembed
                 }
             }
 
+            ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize);
+            std::shared_ptr<arrow::Schema> getSchema();
+            arrow::Status openWriteFile();
+            void openReadFile();
+            arrow::Status writePartition(std::shared_ptr<arrow::Table> table);
+            std::unique_ptr<parquet::arrow::FileWriter> * write();
+            void read();
+            rapidjson::Value * doc();
+            void update_row();
+            std::vector<rapidjson::Document> * record_batch();
+            bool partSetting();
+            int getMaxRowSize();
+            char options();
+            bool shouldRead();
+            arrow::Result<std::vector<rapidjson::Document>> ConvertToVector(std::shared_ptr<arrow::RecordBatch> batch);
+            arrow::Iterator<rapidjson::Document> ConvertToIterator(std::shared_ptr<arrow::Table> table, size_t batch_size);
+            arrow::Result<std::shared_ptr<arrow::RecordBatch>> ConvertToRecordBatch(const std::vector<rapidjson::Document>& rows, std::shared_ptr<arrow::Schema> schema);
+            void setIterator();
+            arrow::Result<rapidjson::Document> next();
+            int64_t num_rows();
+            std::shared_ptr<arrow::StructType> makeChildRecord(const RtlFieldInfo *field);
+            arrow::Status FieldToNode(const std::string& name, const RtlFieldInfo *field, std::vector<std::shared_ptr<arrow::Field>> &arrow_fields);
+            int countFields(const RtlTypeInfo *typeInfo);
+            arrow::Status fieldsToSchema(const RtlTypeInfo *typeInfo);
+            void begin_row();
+            void end_row(const char * name);
         private:
             int current_row;
-            int row_size;                                                       //! The maximum size of each parquet row group.
-            int currentRowGroup;
-            int numRowGroups;                                                   //! The number of row groups in the file that was opened for reading.
-            size_t batch_size;                                                  //! batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
-            int current_read_row;
-            int64_t numRows;                                                    //! The number of result rows that are read from the parquet file. 
-            bool partition;                                                     //! Boolean variable to track whether we are writing partitioned files or not.
-            std::string p_option;                                               //! Read, r, Write, w, option for specifying parquet operation.
-            std::string p_location;                                             //! Location to read parquet file from.
-            std::string p_destination;                                          //! Destination to write parquet file to.
-            std::string p_partDir;                                              //! Directory to create for writing partitioned files.
-            std::shared_ptr<arrow::Schema> schema;
-            std::unique_ptr<parquet::arrow::FileWriter> writer;                 
-            std::vector<rapidjson::Document> parquet_doc;                       //! Document vector for converting rows to columns for writing to parquet files.
-            std::vector<rapidjson::Value> row_stack;                            //! Stack for keeping track of the context when building a nested row.
-            std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         //! Dataset for holding information of partitioned files.
-            arrow::dataset::FileSystemDatasetWriteOptions write_options;        //! Write options for writing partitioned files.
-            std::shared_ptr<arrow::io::FileOutputStream> outfile = nullptr;     //! Shared pointer to FileOutputStream object.
-            std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; //! Input stream for reading from parquet files.
-            std::shared_ptr<arrow::Table> parquet_table = nullptr;              //! Table for creating the iterator for outputing result rows.
-            std::shared_ptr<arrow::io::ReadableFile> infile = nullptr;          //! Shared pointer to ReadableFile object.
-            arrow::Iterator<rapidjson::Document> output;                        //! Arrow iterator to rows read from parquet file.
+            int row_size;                                                       // The maximum size of each parquet row group.
+            int current_row_group;                                                // Current RowGroup that has been read from the input file.
+            int current_read_row;                                               // Current Row that has been read from the RowGroup
+            int num_row_groups;                                                   // The number of row groups in the file that was opened for reading.
+            size_t batch_size;                                                  // batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
+            int64_t numRows;                                                    // The number of result rows that are read from the parquet file. 
+            bool partition;                                                     // Boolean variable to track whether we are writing partitioned files or not.
+            std::string p_option;                                               // Read, r, Write, w, option for specifying parquet operation.
+            std::string p_location;                                             // Location to read parquet file from.
+            std::string p_destination;                                          // Destination to write parquet file to.
+            std::string p_partDir;                                              // Directory to create for writing partitioned files.
+            std::shared_ptr<arrow::Schema> schema;                              // Schema object th
+            std::unique_ptr<parquet::arrow::FileWriter> writer;                 // FileWriter for writing to parquet files.
+            std::vector<rapidjson::Document> parquet_doc;                       // Document vector for converting rows to columns for writing to parquet files.
+            std::vector<rapidjson::Value> row_stack;                            // Stack for keeping track of the context when building a nested row.
+            std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         // Dataset for holding information of partitioned files. PARTITION
+            arrow::dataset::FileSystemDatasetWriteOptions write_options;        // Write options for writing partitioned files. PARTITION
+            std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; // Input stream for reading from parquet files.
+            std::shared_ptr<arrow::Table> parquet_table = nullptr;              // Table for creating the iterator for outputing result rows.
+            arrow::Iterator<rapidjson::Document> output;                        // Arrow iterator to rows read from parquet file.
     };
 
     /**

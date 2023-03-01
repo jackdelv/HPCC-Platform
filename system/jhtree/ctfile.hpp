@@ -1,13 +1,9 @@
 /*##############################################################################
-
     HPCC SYSTEMS software Copyright (C) 2012 HPCC Systems®.
-
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
     You may obtain a copy of the License at
-
        http://www.apache.org/licenses/LICENSE-2.0
-
     Unless required by applicable law or agreed to in writing, software
     distributed under the License is distributed on an "AS IS" BASIS,
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -325,10 +321,6 @@ protected:
     unsigned __int64 firstSequence = 0;
 
     inline size32_t getKeyLen() const { return keyLen; }
-<<<<<<< HEAD
-=======
-    virtual void unpack(const void *node, bool needCopy) override;  // MORE - should move into virtual load()...
->>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 
 public:
 //These are the key functions that need to be implemented for a node that can be searched
@@ -378,11 +370,6 @@ public:
 
 class CJHTreeBlobNode : public CJHTreeNode
 {
-<<<<<<< HEAD
-=======
-protected:
-    virtual void unpack(const void *node, bool needCopy) override;  // MORE - should move into virtual load()...
->>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 public:
     CJHTreeBlobNode ();
     ~CJHTreeBlobNode ();
@@ -394,13 +381,8 @@ public:
 
 class CJHTreeRawDataNode : public CJHTreeNode
 {
-<<<<<<< HEAD
 public:
     virtual void load(CKeyHdr *keyHdr, const void *rawData, offset_t pos, bool needCopy) override;
-=======
-protected:
-    virtual void unpack(const void *node, bool needCopy) override;  // MORE - should move into virtual load()...
->>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 };
 
 class CJHTreeMetadataNode : public CJHTreeRawDataNode
@@ -474,13 +456,8 @@ private:
 
     size32_t compressValue(const char *keyData, size32_t size, char *result);
 public:
-<<<<<<< HEAD
     CLegacyWriteNode(offset_t fpos, CKeyHdr *keyHdr, bool isLeafNode);
     ~CLegacyWriteNode();
-=======
-    CWriteNode(offset_t fpos, CKeyHdr *keyHdr, bool isLeafNode);
-    ~CWriteNode();
->>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 
     virtual void write(IFileIOStream *, CRC32 *crc) override;
     virtual bool add(offset_t pos, const void *data, size32_t size, unsigned __int64 sequence) override;

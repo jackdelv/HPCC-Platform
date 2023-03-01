@@ -1,13 +1,9 @@
 /*##############################################################################
-
     HPCC SYSTEMS software Copyright (C) 2012 HPCC Systems®.
-
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
     You may obtain a copy of the License at
-
        http://www.apache.org/licenses/LICENSE-2.0
-
     Unless required by applicable law or agreed to in writing, software
     distributed under the License is distributed on an "AS IS" BASIS,
     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -294,7 +290,6 @@ void CWriteNodeBase::write(IFileIOStream *out, CRC32 *crc)
 //=========================================================================================================
 
 CWriteNode::CWriteNode(offset_t _fpos, CKeyHdr *_keyHdr, bool isLeafNode) : CWriteNodeBase(_fpos, _keyHdr)
-<<<<<<< HEAD
 {
     hdr.nodeType = isLeafNode ? NodeLeaf : NodeBranch;
 }
@@ -373,11 +368,6 @@ const void *CPOCWriteNode::getLastKeyValue() const
 CLegacyWriteNode::CLegacyWriteNode(offset_t _fpos, CKeyHdr *_keyHdr, bool isLeafNode) : CWriteNode(_fpos, _keyHdr, isLeafNode)
 {
     keyLen = keyHdr->getMaxKeyLength();
-=======
-{
-    keyLen = keyHdr->getMaxKeyLength();
-    hdr.nodeType = isLeafNode ? NodeLeaf : NodeBranch;
->>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
     if (!isLeafNode)
     {
         keyLen = keyHdr->getNodeKeyLength();
@@ -660,43 +650,11 @@ char *CJHTreeNode::expandData(const void *src,size32_t &retsize)
     return outkeys;
 }
 
-<<<<<<< HEAD
 //------------------------------
 
 // A SplitSearchNode is a POC node type where the key fields are stored raw uncompressed, and the payload fields are decompressed only when retrieving a row
 
 CJHSplitSearchNode::~CJHSplitSearchNode()
-=======
-void CJHTreeNode::unpack(const void *node, bool needCopy)
-{
-    assertex(!keyBuf && (expandedSize == 0));
-    memcpy(&hdr, node, sizeof(hdr));
-    SwapBigEndian(hdr);
-    __int64 maxsib = keyHdr->getHdrStruct()->phyrec;
-    if (!hdr.isValid(keyHdr->getNodeSize()))
-    {
-        PROGLOG("hdr.nodeType=%d",(int)hdr.nodeType);
-        PROGLOG("hdr.rightSib=%" I64F "d",hdr.rightSib);
-        PROGLOG("hdr.leftSib=%" I64F "d",hdr.leftSib);
-        PROGLOG("maxsib=%" I64F "d",maxsib);
-        PROGLOG("nodeSize=%d", keyHdr->getNodeSize());
-        PROGLOG("keyBytes=%d",(int)hdr.keyBytes);
-        PrintStackReport();
-        throw MakeStringException(0, "Htree: Corrupt key node detected");
-    }
-    const char *data = ((const char *) node) + sizeof(hdr);
-    if (hdr.crc32)
-    {
-        unsigned crc = crc32(data, hdr.keyBytes, 0);
-        if (hdr.crc32 != crc)
-            throw MakeStringException(0, "CRC error on key node");
-    }
-}
-
-//------------------------------
-
-void CJHSearchNode::load(CKeyHdr *_keyHdr, const void *rawData, offset_t _fpos, bool needCopy)
->>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 {
     if (ownedData)
         free((void *) nodeData);
@@ -810,7 +768,6 @@ int CJHSplitSearchNode::locateGT(const char * search, unsigned minIndex) const
     return a;
 }
 
-<<<<<<< HEAD
 // Loading etc
 
 void CJHSplitSearchNode::load(CKeyHdr *keyHdr, const void *rawData, offset_t fpos, bool needCopy)
@@ -891,9 +848,6 @@ int CJHLegacySearchNode::locateGT(const char * search, unsigned minIndex) const
 }
 
 void CJHLegacySearchNode::load(CKeyHdr *_keyHdr, const void *rawData, offset_t _fpos, bool needCopy)
-=======
-void CJHSearchNode::unpack(const void *node, bool needCopy)
->>>>>>> 647abc22203625f10f4e02f148682d0a963a1300
 {
     CJHSearchNode::load(_keyHdr, rawData, _fpos, needCopy);
     keyLen = _keyHdr->getMaxKeyLength();

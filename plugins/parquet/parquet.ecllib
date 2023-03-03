@@ -1,6 +1,6 @@
 /*##############################################################################
 
-    HPCC SYSTEMS software Copyright (C) 2022 HPCC Systems®.
+    HPCC SYSTEMS software Copyright (C) 2023 HPCC Systems®.
 
     Licensed under the Apache License, Version 2.0 (the "License");
     you may not use this file except in compliance with the License.
@@ -15,10 +15,22 @@
     limitations under the License.
 ############################################################################## */
 
-EXPORT Language := SERVICE : plugin('parquetembed')
-  boolean getEmbedContext():cpp,pure,namespace='parquetembed',entrypoint='getEmbedContext',prototype='IEmbedContext* getEmbedContext()';
+SHARED ParquetService := SERVICE : plugin('parquetembed')
+  BOOLEAN getEmbedContext():cpp, pure, namespace='parquetembed', entrypoint='getEmbedContext', prototype='IEmbedContext* getEmbedContext()';
 END;
 
-EXPORT getEmbedContext := Language.getEmbedContext;
-EXPORT boolean supportsImport := false;
-EXPORT boolean supportsScript := true;
+EXPORT Read(resultLayout, filePath) := FUNCTIONMACRO
+    STREAMED DATASET(resultLayout) _DoParquetRead() := EMBED(parquet : activity, option('read'), location(filePath))
+    ENDEMBED;
+    RETURN _DoParquetRead();
+ENDMACRO;
+
+EXPORT Write(outDS, filePath) := MACRO
+    _DoParquetWrite(STREAMED DATASET(RECORDOF(outDS)) _ds) := EMBED(parquet : activity, option('write'), destination(filePath))
+    ENDEMBED;
+    _doParquetWrite(outDS);
+ENDMACRO;
+
+EXPORT getEmbedContext := ParquetService.getEmbedContext;
+EXPORT BOOLEAN supportsImport := FALSE;
+EXPORT BOOLEAN supportsScript := TRUE;

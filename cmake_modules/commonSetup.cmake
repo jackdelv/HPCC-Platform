@@ -168,6 +168,7 @@ IF ("${COMMONSETUP_DONE}" STREQUAL "")
         KAFKA
         MEMCACHED
         MONGODBEMBED
+        PARQUETEMBED
         MYSQLEMBED
         REDIS
         REMBED

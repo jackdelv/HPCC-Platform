@@ -53,30 +53,30 @@ if(PARQUETEMBED)
 
         install(
             TARGETS parquetembed
-            DESTINATION plugins
+            DESTINATION plugins CALC_DEPS
         )
 
-        # install(
-        #     FILES ${LIBPARQUET_LIB_REAL}
-        #     DESTINATION ${LIB_DIR}
-        #     PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        #     COMPONENT Runtime)
+        install(
+            FILES ${LIBPARQUET_LIB_REAL}
+            DESTINATION ${LIB_DIR} CALC_DEPS
+            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            COMPONENT Runtime)
 
-        # install(
-        #     FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
-        #     DESTINATION ${LIB_DIR}
-        #     COMPONENT Runtime)
-            
-        # install(
-        #     FILES ${LIBARROW_LIB_REAL}
-        #     DESTINATION ${LIB_DIR}
-        #     PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-        #     COMPONENT Runtime)
+        install(
+            FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
+            DESTINATION ${LIB_DIR} CALC_DEPS
+            COMPONENT Runtime)
 
-        # install(
-        #     FILES ${LIBARROW_LIB} ${LIBARROW_LIB_ABI}
-        #     DESTINATION ${LIB_DIR}
-        #     COMPONENT Runtime)
+        install(
+            FILES ${LIBARROW_LIB_REAL}
+            DESTINATION ${LIB_DIR} CALC_DEPS
+            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+            COMPONENT Runtime)
+
+        install(
+            FILES ${LIBARROW_LIB} ${LIBARROW_LIB_ABI}
+            DESTINATION ${LIB_DIR} CALC_DEPS
+            COMPONENT Runtime)
 
         message("Dataset: ${ARROWDATASET}")
 

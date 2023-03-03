@@ -1,7 +1,7 @@
 IMPORT Parquet;
 
 childRec := RECORD
-     INTEGER age;
+     UNSIGNED4 age;
      REAL height;
      REAL weight;
 END;

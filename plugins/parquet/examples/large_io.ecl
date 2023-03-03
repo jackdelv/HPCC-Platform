@@ -18,17 +18,17 @@ layout := RECORD
 END;
 
 #IF(0)
-write_rec(streamed DATASET(layout) sd) := EMBED(parquet: activity, option('write'), destination('/home/hpccuser/dev/test_data/ghtorrent-2019-01-07.parquet'))
+write_rec(streamed DATASET(layout) sd) := EMBED(parquet: activity, option('write'), destination('/datadrive/dev/test_data/ghtorrent-2019-01-07.parquet'))
 ENDEMBED;
 
-csv_data := DATASET('~test::parquet::ghtorrent-2019-01-07.csv', layout, CSV(HEADING(1)));
+csv_data := DATASET('~parquet::large::ghtorrent-2019-02-04.csv', layout, CSV(HEADING(1)));
 write_rec(csv_data);
 #END
 
 #IF(1)
-DATASET(layout) read_rec() := EMBED(parquet: option('read'), location('/home/hpccuser/dev/test_data/ghtorrent-2019-01-07.parquet'))
+DATASET(layout) read_rec() := EMBED(parquet: option('read'), location('/datadrive/dev/test_data/ghtorrent-2019-01-07.parquet'))
 ENDEMBED;
 
 parquet_data := read_rec();
-OUTPUT(CHOOSEN(parquet_data, 2500), NAMED('ghtorrent_2019_01_07'));
+OUTPUT(COUNT(parquet_data), NAMED('ghtorrent_2019_01_07'));
 #END

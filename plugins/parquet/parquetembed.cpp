@@ -478,17 +478,9 @@ namespace parquetembed
                 {
                     arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int64()));
                 }
-                else if (len > 2)
+                else 
                 {
                     arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int32()));
-                }
-                else if (len > 1)
-                {
-                    arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int16()));
-                }
-                else
-                {
-                    arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::int8()));
                 }
             }
             else
@@ -497,36 +489,10 @@ namespace parquetembed
                 {
                     arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint64()));
                 }
-                else if (len > 2)
+                else 
                 {
                     arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint32()));
                 }
-                else if (len > 1)
-                {
-                    arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint16()));
-                }
-                else
-                {
-                    arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint8()));
-                }
-            }
-            break;
-        case type_unsigned:
-            if (len > 4)
-            {
-                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint64()));
-            }
-            else if (len > 2)
-            {
-                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint32()));
-            }
-            else if (len > 1)
-            {
-                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint16()));
-            }
-            else
-            {
-                arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::uint8()));
             }
             break;
         case type_real:

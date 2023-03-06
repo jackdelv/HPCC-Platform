@@ -1,7 +1,7 @@
 IMPORT Parquet;
 
 simpleRec := RECORD
-    INTEGER num;
+    UNSIGNED4 num;
 		REAL balance;
 		UTF8_de lastname;
     STRING name;

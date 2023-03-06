@@ -2,6 +2,7 @@ IMPORT Parquet;
 
 childRec := RECORD
      UNSIGNED4 age;
+     INTEGER2 friends;
      REAL height;
      REAL weight;
 END;
@@ -11,8 +12,8 @@ parentRec := RECORD
 	UTF8_de lastname;
     childRec details;
 END; 
-nested_dataset := DATASET([{'Jack', 'Jackson', {22, 5.9, 600}}, {'John', 'Johnson', {17, 6.3, 18}}, 
-                                {'Amy', 'Amyson', {59, 3.9, 59}}, {'Grace', 'Graceson', {11, 7.9, 100}}], parentRec);
+nested_dataset := DATASET([{'Jack', 'Jackson', {22, 2, 5.9, 600}}, {'John', 'Johnson', {17, 0, 6.3, 18}}, 
+                                {'Amy', 'Amyson', {59, 1, 3.9, 59}}, {'Grace', 'Graceson', {11, 3, 7.9, 100}}], parentRec);
 
 write_rec(dataset(parentRec) sd) := EMBED(parquet: option('write'), MaxRowSize(2), destination('/home/hpccuser/dev/test_data/nested.parquet'))
 ENDEMBED;

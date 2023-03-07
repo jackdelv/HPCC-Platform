@@ -15,13 +15,8 @@ END;
 nested_dataset := DATASET([{'Jack', 'Jackson', {22, 2, 5.9, 600}}, {'John', 'Johnson', {17, 0, 6.3, 18}}, 
                                 {'Amy', 'Amyson', {59, 1, 3.9, 59}}, {'Grace', 'Graceson', {11, 3, 7.9, 100}}], parentRec);
 
-write_rec(dataset(parentRec) sd) := EMBED(parquet: option('write'), MaxRowSize(2), destination('/home/hpccuser/dev/test_data/nested.parquet'))
-ENDEMBED;
 
-DATASET(parentRec) read_rec() := EMBED(parquet: option('read'), location('/home/hpccuser/dev/test_data/nested.parquet'))
-ENDEMBED;
+Write(nested_dataset, '/datadrive/dev/test_data/nested.parquet');
 
-SEQUENTIAL(
-    write_rec(nested_dataset),
-    OUTPUT(read_rec(), NAMED('NESTED_PARQUET_IO'))
-);
+read_in := Read(parentRec, '/datadrive/dev/test_data/nested.parquet');
+OUTPUT(read_in, NAMED('NESTED_PARQUET_IO'));

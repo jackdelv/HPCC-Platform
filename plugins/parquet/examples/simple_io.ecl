@@ -8,13 +8,7 @@ simpleRec := RECORD
 END; 
 simpleDataset := DATASET([{1, 2.4356, U'de\3531', 'Jack'}, {1, 2.4356, U'de\3531', 'Jack'}, {2, 4.8937, U'as\352df', 'John'}, {3, 1.8573, 'nj\351vf', 'Jane'}, {4, 9.1235, U'ds\354fg', 'Jill'}, {5, 6.3297, U'po\355gm', 'Jim'}], simpleRec);
 
-write_rec(dataset(simpleRec) sd) := EMBED(parquet: option('write'), MaxRowSize(2), destination('/home/hpccuser/dev/test_data/simple.parquet'))
-ENDEMBED;
+Write(simpleDataset, '/datadrive/dev/test_data/simple.parquet');
 
-DATASET(simpleRec) read_rec() := EMBED(parquet: option('read'), location('/home/hpccuser/dev/test_data/simple.parquet'))
-ENDEMBED;
-
-SEQUENTIAL(
-    write_rec(simpleDataset),
-    OUTPUT(read_rec(), NAMED('SIMPLE_PARQUET_IO'))
-);
+read_in := Read(simpleRec, '/datadrive/dev/test_data/simple.parquet');
+OUTPUT(read_in, NAMED('SIMPLE_PARQUET_IO'));

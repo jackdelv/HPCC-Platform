@@ -16,9 +16,9 @@
 #include "parquet/arrow/reader.h"
 #include "parquet/arrow/schema.h"
 
+#include <cmath>
 
 // #include <map>
-// #include <mutex>
 // #include <thread>
 // #include <cstdlib>
 // #include <iostream>
@@ -120,7 +120,8 @@ namespace parquetembed
      *
      * @param _batchSize The size of the batches when converting parquet columns to rows.
      */
-    ParquetHelper::ParquetHelper(const char *option, const char *location, const char *destination, const char *partDir, int rowsize, int _batchSize)
+    ParquetHelper::ParquetHelper(const char *option, const char *location, const char *destination, const char *partDir, 
+        int rowsize, int _batchSize, const IThorActivityContext *_activityCtx)
     {
         p_option = option;
         p_location = location;
@@ -128,6 +129,7 @@ namespace parquetembed
         p_partDir = partDir;
         row_size = rowsize;
         batch_size = _batchSize;
+        activityCtx = _activityCtx;
 
         parquet_doc = std::vector<rapidjson::Document>(rowsize);
         current_row = 0;
@@ -303,10 +305,25 @@ namespace parquetembed
         }
         else
         {
-            current_row_group = 0;
+            int total_row_groups = parquet_read->num_row_groups();
+            int workers = activityCtx->numSlaves();  
+            int strands = activityCtx->numStrands();
+
+            if((workers * strands) > 1) 
+            {
+                num_row_groups = std::floor(total_row_groups / (workers * strands));
+                current_row_group = num_row_groups * (activityCtx->querySlave() + activityCtx->queryStrand());
+                start_row_group = current_row_group;
+            }
+            else
+            {
+                num_row_groups = total_row_groups;
+                current_row_group = 0;
+                start_row_group = 0;
+            }
+
             current_read_row = 0;
-            num_row_groups = parquet_read->num_row_groups();
-            arrow::Status st = parquet_read->ReadRowGroup(current_row_group++, &parquet_table);
+            arrow::Status st = parquet_read->RowGroup(current_row_group++)->ReadTable(&parquet_table);
             if (!st.ok())
                 failx("Error reading Row group number %d out of %d groups; %s", current_row_group, num_row_groups, st.message().c_str());
 
@@ -349,7 +366,7 @@ namespace parquetembed
 
     bool ParquetHelper::shouldRead()
     {
-        return !((current_row_group == num_row_groups) && (current_read_row == numRows));
+        return !(((current_row_group - start_row_group) == num_row_groups) && (current_read_row == numRows));
     }
 
     // Convert a single batch of Arrow data into Documents
@@ -424,7 +441,8 @@ namespace parquetembed
         if (current_read_row == numRows)
         {
             // Get new table
-            arrow::Status st = parquet_read->ReadRowGroup(current_row_group, &parquet_table);
+            arrow::Status st = parquet_read->RowGroup(current_row_group)->ReadTable(&parquet_table);
+
             if (!st.ok())
                 failx("Error reading Row group number %d out of %d groups; %s", (current_row_group + 1), num_row_groups, st.message().c_str());
             numRows = parquet_table->num_rows();
@@ -1437,7 +1455,7 @@ namespace parquetembed
      * @param options Pointer to the list of options that are passed into the Embed function.
      * @param _flags Should be zero if the embedded script is ok.
      */
-    ParquetEmbedFunctionContext::ParquetEmbedFunctionContext(const IContextLogger &_logctx, const char *options, unsigned _flags)
+    ParquetEmbedFunctionContext::ParquetEmbedFunctionContext(const IContextLogger &_logctx, const IThorActivityContext *activityCtx, const char *options, unsigned _flags)
     : logctx(_logctx), m_NextRow(), m_nextParam(0), m_numParams(0), m_scriptFlags(_flags)
     {
         // Option Variables
@@ -1474,7 +1492,7 @@ namespace parquetembed
                     failx("Unknown option %s", optName.str());
             }
         }
-        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, partDir, rowsize, batchSize));
+        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, partDir, rowsize, batchSize, activityCtx));
         m_parquet = ptr;
     }
 
@@ -1635,30 +1653,12 @@ namespace parquetembed
      * @brief Compiles the embedded script passed in by the user. The script is placed inside the EMBED
      * and ENDEMBED block.
      * 
-     * @param chars THe number of chars in the script.
+     * @param chars The number of chars in the script.
      * 
      * @param script The embedded script for compilation.
      */
     void ParquetEmbedFunctionContext::compileEmbeddedScript(size32_t chars, const char *script)
     {
-        // Not sure if there will be an embedded script.
-        // if (script && *script) 
-        // {
-        //     // Incoming script is not necessarily null terminated. Note that the chars refers to utf8 characters and not bytes.
-        //     size32_t size = rtlUtf8Size(chars, script);
-
-        //     if (size > 0) 
-        //     {
-        //         StringAttr queryScript;
-        //         queryScript.set(script, size);
-        //         // Do something with the script now that is is done processing
-        //         // queryScript.get()
-        //     }
-        //     else
-        //         failx("Empty query detected");
-        // }
-        // else
-        //     failx("Empty query detected");
     }
     
     void ParquetEmbedFunctionContext::execute()
@@ -1715,7 +1715,7 @@ namespace parquetembed
                 return nullptr;
             } 
             else 
-                return new ParquetEmbedFunctionContext(ctx ? ctx->queryContextLogger() : queryDummyContextLogger(), options, flags);
+                return new ParquetEmbedFunctionContext(ctx ? ctx->queryContextLogger() : queryDummyContextLogger(), activityCtx, options, flags);
         }
 
         virtual IEmbedServiceContext * createServiceContext(const char *service, unsigned flags, const char *options) override

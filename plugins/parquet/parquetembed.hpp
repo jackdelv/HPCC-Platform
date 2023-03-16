@@ -173,8 +173,8 @@ namespace parquetembed
             {
                 if (!array.IsNull(i))
                 {
-                    rapidjson::GenericValue<rapidjson::UTF8<>> str_key(field_->name(), rows_[i].GetAllocator());
-                    rows_[i].AddMember(str_key, array.Value(i), rows_[i].GetAllocator());
+                    rapidjson::GenericValue<rapidjson::UTF8<>> str_key(field_->name(), jsonAlloc);
+                    rows_[i].AddMember(str_key, array.Value(i), jsonAlloc);
                 }
             }
             return arrow::Status::OK();
@@ -654,7 +654,7 @@ namespace parquetembed
     {
         public:
 
-            ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize);
+            ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize, const IThorActivityContext *_activityCtx);
             std::shared_ptr<arrow::Schema> getSchema();
             arrow::Status openWriteFile();
             void openReadFile();
@@ -683,23 +683,25 @@ namespace parquetembed
         private:
             int current_row;
             int row_size;                                                       // The maximum size of each parquet row group.
-            int current_row_group;                                                // Current RowGroup that has been read from the input file.
+            int current_row_group;                                              // Current RowGroup that has been read from the input file.
             int current_read_row;                                               // Current Row that has been read from the RowGroup
-            int num_row_groups;                                                   // The number of row groups in the file that was opened for reading.
+            int start_row_group;
+            int num_row_groups;                                                 // The number of row groups in the file that was opened for reading.
+            int64_t numRows;                                                    // The number of result rows in a given RowGroup read from the parquet file. 
             size_t batch_size;                                                  // batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
-            int64_t numRows;                                                    // The number of result rows that are read from the parquet file. 
             bool partition;                                                     // Boolean variable to track whether we are writing partitioned files or not.
             std::string p_option;                                               // Read, r, Write, w, option for specifying parquet operation.
             std::string p_location;                                             // Location to read parquet file from.
             std::string p_destination;                                          // Destination to write parquet file to.
             std::string p_partDir;                                              // Directory to create for writing partitioned files.
-            std::shared_ptr<arrow::Schema> schema;                              // Schema object th
+            const IThorActivityContext *activityCtx;                            // Additional local context information
+            std::shared_ptr<arrow::Schema> schema;                              // Schema object that holds the schema of the file for reading and writing
             std::unique_ptr<parquet::arrow::FileWriter> writer;                 // FileWriter for writing to parquet files.
             std::vector<rapidjson::Document> parquet_doc;                       // Document vector for converting rows to columns for writing to parquet files.
             std::vector<rapidjson::Value> row_stack;                            // Stack for keeping track of the context when building a nested row.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         // Dataset for holding information of partitioned files. PARTITION
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        // Write options for writing partitioned files. PARTITION
-            std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; // Input stream for reading from parquet files.
+            std::unique_ptr<parquet::arrow::FileReader> parquet_read;           // Input stream for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              // Table for creating the iterator for outputing result rows.
             arrow::Iterator<rapidjson::Document> output;                        // Arrow iterator to rows read from parquet file.
     };
@@ -962,7 +964,7 @@ namespace parquetembed
     class ParquetEmbedFunctionContext : public CInterfaceOf<IEmbedFunctionContext>
     {
     public:
-        ParquetEmbedFunctionContext(const IContextLogger &_logctx, const char *options, unsigned _flags);
+        ParquetEmbedFunctionContext(const IContextLogger &_logctx, const IThorActivityContext *activityCtx, const char *options, unsigned _flags);
         virtual ~ParquetEmbedFunctionContext();
         virtual bool getBooleanResult();
         virtual void getDataResult(size32_t &len, void * &result);

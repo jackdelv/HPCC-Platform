@@ -1,7 +1,7 @@
 IMPORT STD;
 IMPORT Parquet;
 
-// #OPTION('outputLimit', 20000);
+#OPTION('outputLimit', 2000);
 
 layout := RECORD
     STRING actor_login;
@@ -24,5 +24,5 @@ Write(csv_data, '/datadrive/dev/test_data/ghtorrent-2019-02-04.parquet');
 
 #IF(1)
 parquet_data := Read(layout, '/datadrive/dev/test_data/ghtorrent-2019-01-07.parquet');
-OUTPUT(CHOOSEN(parquet_data, 5000), NAMED('ghtorrent_2019_01_07'));
+OUTPUT(CHOOSEN(parquet_data, 1000000), NAMED('ghtorrent_2019_01_07'));
 #END

@@ -15,7 +15,7 @@
 #include "arrow/result.h"
 #include "parquet/arrow/reader.h"
 #include "parquet/arrow/schema.h"
-
+#include "arrow/io/api.h"
 #include <cmath>
 
 // #include <map>
@@ -239,11 +239,26 @@ namespace parquetembed
         }
         else
         {
-            std::shared_ptr<arrow::io::ReadableFile> infile;
-
+            std::shared_ptr<arrow::io::RandomAccessFile> infile;
             PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
 
-            PARQUET_THROW_NOT_OK(parquet::arrow::OpenFile(infile, arrow::default_memory_pool(), &parquet_read));
+            arrow::MemoryPool* pool = arrow::default_memory_pool();
+
+            // Configure Arrow-specific Parquet reader settings
+            auto arrow_reader_props = parquet::ArrowReaderProperties();
+            arrow_reader_props.set_batch_size(batch_size);
+
+            parquet::arrow::FileReaderBuilder reader_builder;
+            reader_builder.memory_pool(pool);
+            auto st = reader_builder.Open(infile);
+            if(!st.ok())
+                failx("Error opening parquet file with FileReaderBuilder, %s", st.message().c_str());
+
+            reader_builder.properties(arrow_reader_props);
+
+            st = reader_builder.Build(&parquet_read);
+            if(!st.ok())
+                failx("Error opening parquet file with FileReaderBuilder, %s", st.message().c_str());
         }
     }
 
@@ -1464,7 +1479,7 @@ namespace parquetembed
         const char *destination = ""; // file name and location of where to read parquet file from
         const char *partDir = ""; // Directory to be created when writing partitioned data.
         int rowsize = 1000; // Size of the row groups when writing to parquet files
-        int batchSize = 100; // Size of the batches when converting parquet columns to rows
+        int batchSize = 1000; // Size of the batches when converting parquet columns to rows
         // Iterate through user options and save them
         StringArray inputOptions;
         inputOptions.appendList(options, ",");

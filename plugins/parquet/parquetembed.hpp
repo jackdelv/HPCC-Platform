@@ -173,8 +173,8 @@ namespace parquetembed
             {
                 if (!array.IsNull(i))
                 {
-                    rapidjson::GenericValue<rapidjson::UTF8<>> str_key(field_->name(), jsonAlloc);
-                    rows_[i].AddMember(str_key, array.Value(i), jsonAlloc);
+                    rapidjson::GenericValue<rapidjson::UTF8<>> str_key(field_->name(), rows_[i].GetAllocator());
+                    rows_[i].AddMember(str_key, array.Value(i), rows_[i].GetAllocator());
                 }
             }
             return arrow::Status::OK();

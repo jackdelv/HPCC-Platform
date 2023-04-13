@@ -239,26 +239,34 @@ namespace parquetembed
         }
         else
         {
-            std::shared_ptr<arrow::io::RandomAccessFile> infile;
-            PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
+            // Configure memory pool
+            pool = arrow::default_memory_pool();
 
-            arrow::MemoryPool* pool = arrow::default_memory_pool();
+            // Configure Arrow-specific Parquet reader settings with lazy cache
+            auto arrow_reader_props = parquet::ArrowReaderProperties(true);
+            auto arrow_cache_options = arrow::io::CacheOptions::LazyDefaults();
+            arrow_reader_props.set_cache_options(arrow_cache_options);
 
-            // Configure Arrow-specific Parquet reader settings
-            auto arrow_reader_props = parquet::ArrowReaderProperties();
-            arrow_reader_props.set_batch_size(batch_size);
-
+            // Configure FileReaderBuilder
             parquet::arrow::FileReaderBuilder reader_builder;
             reader_builder.memory_pool(pool);
-            auto st = reader_builder.Open(infile);
-            if(!st.ok())
-                failx("Error opening parquet file with FileReaderBuilder, %s", st.message().c_str());
-
             reader_builder.properties(arrow_reader_props);
 
-            st = reader_builder.Build(&parquet_read);
-            if(!st.ok())
-                failx("Error opening parquet file with FileReaderBuilder, %s", st.message().c_str());
+            {
+                CriticalBlock block(fileLock);
+
+                // Open RandomAccessFile to parquet file
+                std::shared_ptr<arrow::io::RandomAccessFile> infile;
+                PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
+
+                auto st = reader_builder.Open(infile, parquet::ReaderProperties(pool)); // parquet::arrow::OpenFile(infile, pool, &parquet_read);
+                if(!st.ok())
+                    failx("Error opening parquet file with FileReaderBuilder, %s", st.message().c_str());
+                
+                st = reader_builder.Build(&parquet_read);
+                if(!st.ok())
+                    failx("Error building parquet file with FileReaderBuilder, %s", st.message().c_str());
+            }
         }
     }
 
@@ -338,9 +346,13 @@ namespace parquetembed
             }
 
             current_read_row = 0;
-            arrow::Status st = parquet_read->RowGroup(current_row_group++)->ReadTable(&parquet_table);
-            if (!st.ok())
-                failx("Error reading Row group number %d out of %d groups; %s", current_row_group, num_row_groups, st.message().c_str());
+            {
+                CriticalBlock block(fileLock);
+
+                arrow::Status st = parquet_read->RowGroup(current_row_group++)->ReadTable(&parquet_table);
+                if (!st.ok())
+                    failx("Error reading Row group number %d out of %d groups; %s", current_row_group, num_row_groups, st.message().c_str());
+            }
 
             numRows = parquet_table->num_rows();
         }
@@ -455,11 +467,15 @@ namespace parquetembed
     {
         if (current_read_row == numRows)
         {
-            // Get new table
-            arrow::Status st = parquet_read->RowGroup(current_row_group)->ReadTable(&parquet_table);
+            {
+                CriticalBlock block(fileLock);
 
-            if (!st.ok())
-                failx("Error reading Row group number %d out of %d groups; %s", (current_row_group + 1), num_row_groups, st.message().c_str());
+                // Get new table
+                arrow::Status st = parquet_read->RowGroup(current_row_group)->ReadTable(&parquet_table);
+                if (!st.ok())
+                    failx("Error reading Row group number %d out of %d groups; %s", (current_row_group + 1), num_row_groups, st.message().c_str());
+            }
+
             numRows = parquet_table->num_rows();
             // Convert to iterator
             setIterator();

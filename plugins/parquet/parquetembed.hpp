@@ -42,6 +42,7 @@
 #include "roxiemem.hpp"
 
 #include <iostream>
+#include <mutex>
 
 namespace parquetembed
 {
@@ -622,7 +623,7 @@ namespace parquetembed
 
             return arrow::Status::OK();
         }
-
+    
     private:
         std::string field_name_;
         arrow::ArrayBuilder *builder_;
@@ -653,7 +654,8 @@ namespace parquetembed
     class ParquetHelper
     {
         public:
-
+            arrow::MemoryPool* pool;
+            static CriticalSection fileLock;
             ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize, const IThorActivityContext *_activityCtx);
             std::shared_ptr<arrow::Schema> getSchema();
             arrow::Status openWriteFile();
@@ -705,6 +707,7 @@ namespace parquetembed
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              // Table for creating the iterator for outputing result rows.
             arrow::Iterator<rapidjson::Document> output;                        // Arrow iterator to rows read from parquet file.
     };
+    CriticalSection parquetembed::ParquetHelper::fileLock = CriticalSection();
 
     /**
      * @brief Builds ECL Records from Parquet result rows.

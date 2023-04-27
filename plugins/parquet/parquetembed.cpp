@@ -65,6 +65,7 @@ extern "C" PARQUETEMBED_PLUGIN_API bool getECLPluginDefinition(ECLPluginDefiniti
 
 namespace parquetembed
 {
+    static CriticalSection fileLock;
     //--------------------------------------------------------------------------
     // Plugin Classes
     //--------------------------------------------------------------------------
@@ -120,11 +121,11 @@ namespace parquetembed
      *
      * @param _batchSize The size of the batches when converting parquet columns to rows.
      */
-    ParquetHelper::ParquetHelper(const char *option, const char *location, const char *destination, const char *partDir, 
+    ParquetHelper::ParquetHelper(const char *option, const char *_location, const char *destination, const char *partDir, 
         int rowsize, int _batchSize, const IThorActivityContext *_activityCtx)
     {
         p_option = option;
-        p_location = location;
+        location = _location;
         p_destination = destination;
         p_partDir = partDir;
         row_size = rowsize;
@@ -158,13 +159,13 @@ namespace parquetembed
     {
         if (partition)
         {
-            if (p_location == "")
+            if (location == "")
                 failx("Cannot partition files because the location was not supplied.");
             else if (p_partDir == "")
                 failx("Cannot partition files because the partition directory was not supplied.");
 
-            std::string uri = "file://" + p_location;
-            std::string base_path = p_location + p_partDir;
+            std::string uri = "file://" + location;
+            std::string base_path = location + p_partDir;
             ARROW_ASSIGN_OR_RAISE(auto filesystem, arrow::fs::FileSystemFromUri(uri));
 
             ARROW_RETURN_NOT_OK(filesystem->CreateDir(base_path));
@@ -218,7 +219,7 @@ namespace parquetembed
             // Create a filesystem
             std::shared_ptr<arrow::fs::LocalFileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
             arrow::fs::FileSelector selector;
-            selector.base_dir = p_location; // The base directory to be searched is provided by the user in the location option.
+            selector.base_dir = location; // The base directory to be searched is provided by the user in the location option.
             selector.recursive = true;      // Selector will search the base path recursively for partitioned files.
 
             // Create a file format
@@ -239,33 +240,23 @@ namespace parquetembed
         }
         else
         {
-            // Configure memory pool
-            pool = arrow::default_memory_pool();
-
-            // Configure Arrow-specific Parquet reader settings with lazy cache
-            auto arrow_reader_props = parquet::ArrowReaderProperties(true);
-            auto arrow_cache_options = arrow::io::CacheOptions::LazyDefaults();
-            arrow_reader_props.set_cache_options(arrow_cache_options);
-
-            // Configure FileReaderBuilder
-            parquet::arrow::FileReaderBuilder reader_builder;
-            reader_builder.memory_pool(pool);
-            reader_builder.properties(arrow_reader_props);
+            arrow::Status st;
+            arrow::MemoryPool* pool = arrow::default_memory_pool();
+            auto reader_properties = parquet::ReaderProperties(pool);
 
             {
-                CriticalBlock block(fileLock);
+                CriticalBlock block(parquetembed::fileLock);
 
-                // Open RandomAccessFile to parquet file
                 std::shared_ptr<arrow::io::RandomAccessFile> infile;
-                PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(p_location));
+                PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(location));
 
-                auto st = reader_builder.Open(infile, parquet::ReaderProperties(pool)); // parquet::arrow::OpenFile(infile, pool, &parquet_read);
+                st = parquet::arrow::OpenFile(infile, pool, &parquet_read);
                 if(!st.ok())
+                {
                     failx("Error opening parquet file with FileReaderBuilder, %s", st.message().c_str());
-                
-                st = reader_builder.Build(&parquet_read);
-                if(!st.ok())
-                    failx("Error building parquet file with FileReaderBuilder, %s", st.message().c_str());
+                }
+
+                parquet_read->parquet_reader()->Close();
             }
         }
     }
@@ -347,7 +338,7 @@ namespace parquetembed
 
             current_read_row = 0;
             {
-                CriticalBlock block(fileLock);
+                CriticalBlock block(parquetembed::fileLock);
 
                 arrow::Status st = parquet_read->RowGroup(current_row_group++)->ReadTable(&parquet_table);
                 if (!st.ok())
@@ -468,7 +459,7 @@ namespace parquetembed
         if (current_read_row == numRows)
         {
             {
-                CriticalBlock block(fileLock);
+                CriticalBlock block(parquetembed::fileLock);
 
                 // Get new table
                 arrow::Status st = parquet_read->RowGroup(current_row_group)->ReadTable(&parquet_table);

@@ -655,7 +655,6 @@ namespace parquetembed
     {
         public:
             arrow::MemoryPool* pool;
-            static CriticalSection fileLock;
             ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize, const IThorActivityContext *_activityCtx);
             std::shared_ptr<arrow::Schema> getSchema();
             arrow::Status openWriteFile();
@@ -693,7 +692,7 @@ namespace parquetembed
             size_t batch_size;                                                  // batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
             bool partition;                                                     // Boolean variable to track whether we are writing partitioned files or not.
             std::string p_option;                                               // Read, r, Write, w, option for specifying parquet operation.
-            std::string p_location;                                             // Location to read parquet file from.
+            std::string location;                                               // Location to read parquet file from.
             std::string p_destination;                                          // Destination to write parquet file to.
             std::string p_partDir;                                              // Directory to create for writing partitioned files.
             const IThorActivityContext *activityCtx;                            // Additional local context information
@@ -703,11 +702,10 @@ namespace parquetembed
             std::vector<rapidjson::Value> row_stack;                            // Stack for keeping track of the context when building a nested row.
             std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         // Dataset for holding information of partitioned files. PARTITION
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        // Write options for writing partitioned files. PARTITION
-            std::unique_ptr<parquet::arrow::FileReader> parquet_read;           // Input stream for reading from parquet files.
+            std::unique_ptr<parquet::arrow::FileReader> parquet_read;           // FileReader for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              // Table for creating the iterator for outputing result rows.
             arrow::Iterator<rapidjson::Document> output;                        // Arrow iterator to rows read from parquet file.
     };
-    CriticalSection parquetembed::ParquetHelper::fileLock = CriticalSection();
 
     /**
      * @brief Builds ECL Records from Parquet result rows.

@@ -2,6 +2,7 @@ IMPORT STD;
 IMPORT Parquet;
 
 #OPTION('outputLimit', 2000);
+#OPTION('pickBestEngine', FALSE);
 
 layout := RECORD
     STRING actor_login;

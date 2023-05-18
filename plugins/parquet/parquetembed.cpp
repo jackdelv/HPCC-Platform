@@ -200,10 +200,7 @@ namespace parquetembed
             std::shared_ptr<parquet::ArrowWriterProperties> arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
 
             // Create a writer
-            arrow::Status st = parquet::arrow::FileWriter::Open(*schema.get(), arrow::default_memory_pool(), outfile, props, arrow_props, &writer);
-
-            if (!st.ok())
-                failx("error opening FileWriter, %s", st.message().c_str());
+            ARROW_ASSIGN_OR_RAISE(writer, parquet::arrow::FileWriter::Open(*schema.get(), arrow::default_memory_pool(), outfile, props, arrow_props));
         }
         return arrow::Status::OK();
     }
@@ -212,7 +209,7 @@ namespace parquetembed
      * @brief Opens the read stream with the schema and location.
      *
      */
-    void ParquetHelper::openReadFile()
+    arrow::Status ParquetHelper::openReadFile()
     {
         if (partition)
         {
@@ -243,22 +240,20 @@ namespace parquetembed
             arrow::Status st;
             arrow::MemoryPool* pool = arrow::default_memory_pool();
             auto reader_properties = parquet::ReaderProperties(pool);
+            auto arrow_reader_props = parquet::ArrowReaderProperties();
+            parquet::arrow::FileReaderBuilder reader_builder;
 
             {
                 CriticalBlock block(parquetembed::fileLock);
 
-                std::shared_ptr<arrow::io::RandomAccessFile> infile;
-                PARQUET_ASSIGN_OR_THROW(infile, arrow::io::ReadableFile::Open(location));
+                ARROW_RETURN_NOT_OK(reader_builder.OpenFile(location, false, reader_properties));
+                reader_builder.memory_pool(pool);
+                reader_builder.properties(arrow_reader_props);
 
-                st = parquet::arrow::OpenFile(infile, pool, &parquet_read);
-                if(!st.ok())
-                {
-                    failx("Error opening parquet file with FileReaderBuilder, %s", st.message().c_str());
-                }
-
-                parquet_read->parquet_reader()->Close();
+                ARROW_ASSIGN_OR_RAISE(parquet_read, reader_builder.Build());
             }
         }
+        return arrow::Status::OK();
     }
 
     arrow::Status ParquetHelper::writePartition(std::shared_ptr<arrow::Table> table)
@@ -1686,7 +1681,9 @@ namespace parquetembed
     void ParquetEmbedFunctionContext::execute()
     {
         if (m_oInputStream)
+        {
             m_oInputStream->executeAll();
+        }
         else
         {
             if(m_parquet->options() == 'w')
@@ -1695,11 +1692,17 @@ namespace parquetembed
             }
             else if(m_parquet->options() == 'r')
             {
-                m_parquet->openReadFile();
+                arrow::Status st = m_parquet->openReadFile();
 
-                m_parquet->read();
-
-                m_parquet->setIterator();
+                if(st.ok())
+                {
+                    m_parquet->read();
+                    m_parquet->setIterator();
+                }
+                else
+                {
+                    failx("Parquet: Error opening file for reading.");
+                }
             }
         }
     }

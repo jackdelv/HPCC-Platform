@@ -658,7 +658,7 @@ namespace parquetembed
             ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize, const IThorActivityContext *_activityCtx);
             std::shared_ptr<arrow::Schema> getSchema();
             arrow::Status openWriteFile();
-            void openReadFile();
+            arrow::Status openReadFile();
             arrow::Status writePartition(std::shared_ptr<arrow::Table> table);
             std::unique_ptr<parquet::arrow::FileWriter> * write();
             void read();

@@ -123,11 +123,8 @@ namespace parquetembed
      */
     ParquetHelper::ParquetHelper(const char *option, const char *_location, const char *destination, const char *partDir, 
         int rowsize, int _batchSize, const IThorActivityContext *_activityCtx)
+        : p_option(option), location(_location), p_destination(destination), p_partDir(partDir)
     {
-        p_option = option;
-        location = _location;
-        p_destination = destination;
-        p_partDir = partDir;
         row_size = rowsize;
         batch_size = _batchSize;
         activityCtx = _activityCtx;
@@ -135,7 +132,8 @@ namespace parquetembed
         parquet_doc = std::vector<rapidjson::Document>(rowsize);
         current_row = 0;
 
-        if (option[1])
+        // TODO think of a better scheme for setting multiple read/write
+        if (strlen(option) == 2 && option[1])
             partition = (option[1] == 'M' || option[1] == 'm');
         else
             partition = false;
@@ -641,6 +639,11 @@ namespace parquetembed
         }
     }
 
+    void ParquetHelper::close_file()
+    {
+        parquet_read.reset();
+    }
+
     ParquetRowStream::ParquetRowStream(IEngineRowAllocator* _resultAllocator, std::shared_ptr<ParquetHelper> _parquet)
         : m_resultAllocator(_resultAllocator)
     {
@@ -680,6 +683,10 @@ namespace parquetembed
             }
             else
                 failx("Error processing result row");
+        }
+        else
+        {
+            s_parquet->close_file();
         }
         return nullptr;
     }
@@ -1509,8 +1516,14 @@ namespace parquetembed
                     failx("Unknown option %s", optName.str());
             }
         }
-        std::shared_ptr<ParquetHelper> ptr(new ParquetHelper(option, location, destination, partDir, rowsize, batchSize, activityCtx));
-        m_parquet = ptr;
+        if (option == "" || (location == "" && destination == ""))
+        {
+            failx("Invalid options must specify read or write settings and a location to perform such actions.");
+        }
+        else
+        {
+            m_parquet = std::make_shared<ParquetHelper>(option, location, destination, partDir, rowsize, batchSize, activityCtx);
+        }
     }
 
     /**

@@ -681,6 +681,7 @@ namespace parquetembed
             arrow::Status fieldsToSchema(const RtlTypeInfo *typeInfo);
             void begin_row();
             void end_row(const char * name);
+            void close_file();
         private:
             int current_row;
             int row_size;                                                       // The maximum size of each parquet row group.

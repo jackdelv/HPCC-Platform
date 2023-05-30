@@ -471,7 +471,7 @@ namespace parquetembed
             }
             return arrow::Status::OK();
         }
-        
+
         arrow::Status Visit(const arrow::UInt32Type &type)
         {
             arrow::UInt32Builder *builder = static_cast<arrow::UInt32Builder *>(builder_);
@@ -623,7 +623,7 @@ namespace parquetembed
 
             return arrow::Status::OK();
         }
-    
+
     private:
         std::string field_name_;
         arrow::ArrayBuilder *builder_;
@@ -648,7 +648,7 @@ namespace parquetembed
     };
 
     /**
-     * @brief ParquetHelper holds the inputs from the user, the file stream objects, function for setting the schema, and functions 
+     * @brief ParquetHelper holds the inputs from the user, the file stream objects, function for setting the schema, and functions
      * for opening parquet files.
      */
     class ParquetHelper
@@ -689,7 +689,7 @@ namespace parquetembed
             int current_read_row;                                               // Current Row that has been read from the RowGroup
             int start_row_group;
             int num_row_groups;                                                 // The number of row groups in the file that was opened for reading.
-            int64_t numRows;                                                    // The number of result rows in a given RowGroup read from the parquet file. 
+            int64_t numRows;                                                    // The number of result rows in a given RowGroup read from the parquet file.
             size_t batch_size;                                                  // batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
             bool partition;                                                     // Boolean variable to track whether we are writing partitioned files or not.
             std::string p_option;                                               // Read, r, Write, w, option for specifying parquet operation.
@@ -814,9 +814,9 @@ namespace parquetembed
             return false;
         }
         virtual bool processBeginRow(const RtlFieldInfo * field)
-        { 
+        {
             // There is a better way to do this than creating a stack and having to iterate back through to
-            // copy over the members of the rapidjson value. 
+            // copy over the members of the rapidjson value.
             // TO DO
             // Create a json string of all the fields which will be much more performant.
             r_parquet->begin_row();
@@ -937,8 +937,8 @@ namespace parquetembed
                 int i = 1;
                 int row_size = d_parquet->getMaxRowSize();
                 for(; bindNext(); d_parquet->update_row(), i++)
-                {   
-                    if (i % row_size == 0) 
+                {
+                    if (i % row_size == 0)
                     {
                         writeRecordBatch(d_parquet->record_batch());
                         parquetembed::jsonAlloc.Clear();

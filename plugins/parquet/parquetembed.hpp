@@ -153,6 +153,8 @@ namespace parquetembed
             }
         }
 
+        ~RowBatchBuilder() = default;
+
         // Set which field to convert.
         void SetField(const arrow::Field *field) { field_ = field; }
 
@@ -283,6 +285,8 @@ namespace parquetembed
                         std::vector<std::string> path, int64_t array_levels)
         : rows(rows), path(std::move(path)), array_levels(array_levels) {}
 
+    ~DocValuesIterator() = default;
+
     const rapidjson::Value* NextArrayOrRow(const rapidjson::Value* value, size_t* path_i,
                                             int64_t* arr_i) {
         while (array_stack.size() > 0) {
@@ -374,6 +378,8 @@ namespace parquetembed
 
         JsonValueConverter(const std::vector<rapidjson::Document> &rows, const std::vector<std::string> &root_path, int64_t array_levels)
             : rows_(rows), root_path_(root_path), array_levels_(array_levels) {}
+
+        ~JsonValueConverter() = default;
 
         /// \brief For field passed in, append corresponding values to builder
         arrow::Status Convert(const arrow::Field &field, arrow::ArrayBuilder *builder)
@@ -654,8 +660,8 @@ namespace parquetembed
     class ParquetHelper
     {
         public:
-            arrow::MemoryPool* pool;
             ParquetHelper(const char * option, const char * location, const char * destination, const char * partDir, int rowsize, int _batchSize, const IThorActivityContext *_activityCtx);
+            ~ParquetHelper();
             std::shared_ptr<arrow::Schema> getSchema();
             arrow::Status openWriteFile();
             arrow::Status openReadFile();
@@ -706,6 +712,7 @@ namespace parquetembed
             std::unique_ptr<parquet::arrow::FileReader> parquet_read;           // FileReader for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              // Table for creating the iterator for outputing result rows.
             arrow::Iterator<rapidjson::Document> output;                        // Arrow iterator to rows read from parquet file.
+            arrow::MemoryPool* pool;
     };
 
     /**
@@ -716,7 +723,7 @@ namespace parquetembed
     {
     public:
         ParquetRowStream(IEngineRowAllocator* _resultAllocator, std::shared_ptr<ParquetHelper> _parquet);
-        virtual ~ParquetRowStream();
+        virtual ~ParquetRowStream() = default;
 
         RTLIMPLEMENT_IINTERFACE
         virtual const void* nextRow();
@@ -744,6 +751,8 @@ namespace parquetembed
                 failx("Missing result row data");
             m_pathStack.reserve(10);
         }
+
+        virtual ~ParquetRowBuilder() = default;
 
         virtual bool getBooleanResult(const RtlFieldInfo *field);
         virtual void getDataResult(const RtlFieldInfo *field, size32_t &len, void * &result);
@@ -786,6 +795,8 @@ namespace parquetembed
             r_parquet = _parquet;
             partition = _parquet->partSetting();
         }
+
+        virtual ~ParquetRecordBinder() = default;
 
         int numFields();
         void processRow(const byte *row);
@@ -873,6 +884,7 @@ namespace parquetembed
 
             reportIfFailure(d_parquet->fieldsToSchema(_typeInfo));
         }
+        virtual ~ParquetDatasetBinder() = default;
         void getFieldTypes(const RtlTypeInfo *typeInfo);
 
         /**
@@ -967,7 +979,7 @@ namespace parquetembed
     {
     public:
         ParquetEmbedFunctionContext(const IContextLogger &_logctx, const IThorActivityContext *activityCtx, const char *options, unsigned _flags);
-        virtual ~ParquetEmbedFunctionContext();
+        virtual ~ParquetEmbedFunctionContext() = default;
         virtual bool getBooleanResult();
         virtual void getDataResult(size32_t &len, void * &result);
         virtual double getRealResult();

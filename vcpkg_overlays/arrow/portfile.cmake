@@ -2,7 +2,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO jackdelv/arrow
     REF main
-    SHA512 df76484c9d674751d7b53ee24ba184c6e41184f6c1c18d406ece3be1352e9dcdd7bd78c13c4b44d706d4536c4fd49293b0efe90b095e152d3439a74e01f44e8a
+    SHA512 cb5d182bbc4e8ab4434355ee7ea17cc08dde8ac47e15691789715f216f74ae5c6bb424ada5b01171e38477190000175501c58b46feb906f0f9381a838a4e67e1
     HEAD_REF main
     PATCHES
         msvc-static-name.patch

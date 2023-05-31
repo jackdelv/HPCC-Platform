@@ -129,6 +129,8 @@ namespace parquetembed
         batch_size = _batchSize;
         activityCtx = _activityCtx;
 
+        pool = arrow::default_memory_pool();
+
         parquet_doc = std::vector<rapidjson::Document>(rowsize);
         current_row = 0;
 
@@ -137,6 +139,11 @@ namespace parquetembed
             partition = (option[1] == 'M' || option[1] == 'm');
         else
             partition = false;
+    }
+
+    ParquetHelper::~ParquetHelper()
+    {
+        pool->ReleaseUnused();
     }
 
     /**
@@ -198,7 +205,7 @@ namespace parquetembed
             std::shared_ptr<parquet::ArrowWriterProperties> arrow_props = parquet::ArrowWriterProperties::Builder().store_schema()->build();
 
             // Create a writer
-            ARROW_ASSIGN_OR_RAISE(writer, parquet::arrow::FileWriter::Open(*schema.get(), arrow::default_memory_pool(), outfile, props, arrow_props));
+            ARROW_ASSIGN_OR_RAISE(writer, parquet::arrow::FileWriter::Open(*schema.get(), pool, outfile, props, arrow_props));
         }
         return arrow::Status::OK();
     }
@@ -236,7 +243,6 @@ namespace parquetembed
         else
         {
             arrow::Status st;
-            arrow::MemoryPool* pool = arrow::default_memory_pool();
             auto reader_properties = parquet::ReaderProperties(pool);
             auto arrow_reader_props = parquet::ArrowReaderProperties();
             parquet::arrow::FileReaderBuilder reader_builder;
@@ -316,7 +322,7 @@ namespace parquetembed
             int workers = activityCtx->numSlaves();
             int strands = activityCtx->numStrands();
 
-            if((workers * strands) > 1)
+            if ((workers * strands) > 1)
             {
                 num_row_groups = std::floor(total_row_groups / (workers * strands));
                 current_row_group = num_row_groups * (activityCtx->querySlave() + activityCtx->queryStrand());
@@ -422,7 +428,7 @@ namespace parquetembed
         std::unique_ptr<arrow::RecordBatchBuilder> batch_builder;
         ARROW_ASSIGN_OR_RAISE(
             batch_builder,
-            arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rows.size()));
+            arrow::RecordBatchBuilder::Make(schema, pool, rows.size()));
 
         // Inner converter will take rows and be responsible for appending values
         // to provided array builders.
@@ -505,7 +511,7 @@ namespace parquetembed
             arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::boolean()));
             break;
         case type_int:
-            if(field->type->isSigned())
+            if (field->type->isSigned())
             {
                 if (len > 4)
                 {
@@ -651,10 +657,6 @@ namespace parquetembed
         m_currentRow = 0;
         m_shouldRead = true;
         numRows = _parquet->num_rows();
-    }
-
-    ParquetRowStream::~ParquetRowStream()
-    {
     }
 
     const void* ParquetRowStream::nextRow()
@@ -1526,13 +1528,6 @@ namespace parquetembed
         }
     }
 
-    /**
-     * @brief Destroy the ParquetEmbedFunctionContext object.
-     */
-    ParquetEmbedFunctionContext::~ParquetEmbedFunctionContext()
-    {
-    }
-
     bool ParquetEmbedFunctionContext::getBooleanResult()
     {
         // TO DO
@@ -1699,15 +1694,15 @@ namespace parquetembed
         }
         else
         {
-            if(m_parquet->options() == 'w')
+            if (m_parquet->options() == 'w')
             {
 
             }
-            else if(m_parquet->options() == 'r')
+            else if (m_parquet->options() == 'r')
             {
                 arrow::Status st = m_parquet->openReadFile();
 
-                if(st.ok())
+                if (st.ok())
                 {
                     m_parquet->read();
                     m_parquet->setIterator();

@@ -1,15 +1,17 @@
-vcpkg_from_github( 
-    OUT_SOURCE_PATH SOURCE_PATH
-    REPO jackdelv/arrow
-    REF main
-    SHA512 cb5d182bbc4e8ab4434355ee7ea17cc08dde8ac47e15691789715f216f74ae5c6bb424ada5b01171e38477190000175501c58b46feb906f0f9381a838a4e67e1
-    HEAD_REF main
+vcpkg_download_distfile(
+    ARCHIVE_PATH
+    URLS "https://archive.apache.org/dist/arrow/arrow-12.0.0/apache-arrow-12.0.0.tar.gz"
+    FILENAME apache-arrow-12.0.0.tar.gz
+    SHA512 f815be4fb20b6001ba5525270765fe239b5468708a7be34b93b60ee0ce63464727d183c9756fbc33bffd199019e1f06a7fddd306ce8388435cea7771070a2ca9
+)
+vcpkg_extract_source_archive(
+    SOURCE_PATH
+    ARCHIVE ${ARCHIVE_PATH}
     PATCHES
         msvc-static-name.patch
         utf8proc.patch
         thrift.patch
 )
-
 
 vcpkg_check_features(OUT_FEATURE_OPTIONS FEATURE_OPTIONS
     FEATURES

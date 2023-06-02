@@ -298,6 +298,65 @@ namespace parquetembed
     }
 
     /**
+     * @brief Divide row groups being read from a parquet file among any number of thor workers. If running hthor all row groups are assigned to it. This function
+     * will handle all cases where the number of groups is greater than, less than or divisible by the number of thor workers.
+     */
+    void divide_row_groups(const IThorActivityContext *activityCtx, int &total_row_groups, int &num_row_groups, int &current_row_group, int &start_row_group)
+    {
+        int workers = activityCtx->numSlaves();
+        int strands = activityCtx->numStrands();
+        int worker_id = activityCtx->querySlave();
+
+        // Currently under the assumption that all channels and workers are given a worker id and no matter
+        // the configuration will show up in activityCtx->numSlaves()
+        if (workers > 1)
+        {
+            if (total_row_groups % workers == 0)
+            {
+                num_row_groups = total_row_groups / workers;
+                current_row_group = num_row_groups * worker_id;
+                start_row_group = current_row_group;
+            }
+            else if (total_row_groups > workers)
+            {
+                if (worker_id == (workers - 1)) 
+                {
+                    num_row_groups = total_row_groups - (std::ceil(total_row_groups / workers) * (workers - 1));
+                    current_row_group = num_row_groups * worker_id;
+                    start_row_group = current_row_group;
+                }
+                else
+                {
+                    num_row_groups = std::ceil(total_row_groups / workers);
+                    current_row_group = num_row_groups * worker_id;
+                    start_row_group = current_row_group;
+                }
+            }
+            else
+            {
+                if (worker_id < total_row_groups)
+                {
+                    num_row_groups = 1;
+                    current_row_group = worker_id;
+                    start_row_group = current_row_group;
+                }
+                else
+                {
+                    num_row_groups = 0;
+                    current_row_group = 0;
+                    start_row_group = 0;
+                }
+            }
+        }
+        else
+        {
+            num_row_groups = total_row_groups;
+            current_row_group = 0;
+            start_row_group = 0;
+        }
+    }
+
+    /**
      * @brief Sets the parquet_table member to the output of what is read from the given
      * parquet file.
      */
@@ -309,6 +368,7 @@ namespace parquetembed
             // read it all into a single table.
             // Create a scanner
             arrow::dataset::ScannerBuilder scanner_builder(dataset);
+            reportIfFailure(scanner_builder.Pool(pool));
             PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
 
             // Scan the dataset
@@ -319,32 +379,23 @@ namespace parquetembed
         else
         {
             int total_row_groups = parquet_read->num_row_groups();
-            int workers = activityCtx->numSlaves();
-            int strands = activityCtx->numStrands();
-
-            if ((workers * strands) > 1)
+            divide_row_groups(activityCtx, total_row_groups, num_row_groups, current_row_group, start_row_group);
+            
+            current_read_row = 0;
+            if (num_row_groups != 0)
             {
-                num_row_groups = std::floor(total_row_groups / (workers * strands));
-                current_row_group = num_row_groups * (activityCtx->querySlave() + activityCtx->queryStrand());
-                start_row_group = current_row_group;
+                {
+                    CriticalBlock block(parquetembed::fileLock);
+
+                    reportIfFailure(parquet_read->RowGroup(current_row_group++)->ReadTable(&parquet_table));
+                }
+                numRows = parquet_table->num_rows();
+                setIterator();
             }
             else
             {
-                num_row_groups = total_row_groups;
-                current_row_group = 0;
-                start_row_group = 0;
+                numRows = 0;
             }
-
-            current_read_row = 0;
-            {
-                CriticalBlock block(parquetembed::fileLock);
-
-                arrow::Status st = parquet_read->RowGroup(current_row_group++)->ReadTable(&parquet_table);
-                if (!st.ok())
-                    failx("Error reading Row group number %d out of %d groups; %s", current_row_group, num_row_groups, st.message().c_str());
-            }
-
-            numRows = parquet_table->num_rows();
         }
     }
 
@@ -428,7 +479,7 @@ namespace parquetembed
         std::unique_ptr<arrow::RecordBatchBuilder> batch_builder;
         ARROW_ASSIGN_OR_RAISE(
             batch_builder,
-            arrow::RecordBatchBuilder::Make(schema, pool, rows.size()));
+            arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rows.size()));
 
         // Inner converter will take rows and be responsible for appending values
         // to provided array builders.
@@ -463,7 +514,7 @@ namespace parquetembed
                 // Get new table
                 arrow::Status st = parquet_read->RowGroup(current_row_group)->ReadTable(&parquet_table);
                 if (!st.ok())
-                    failx("Error reading Row group number %d out of %d groups; %s", (current_row_group + 1), num_row_groups, st.message().c_str());
+                    failx("Error in next: Row group number %d out of %d groups; %s", current_row_group, num_row_groups, st.message().c_str());
             }
 
             numRows = parquet_table->num_rows();
@@ -1705,7 +1756,6 @@ namespace parquetembed
                 if (st.ok())
                 {
                     m_parquet->read();
-                    m_parquet->setIterator();
                 }
                 else
                 {

@@ -693,8 +693,8 @@ namespace parquetembed
             int row_size;                                                       // The maximum size of each parquet row group.
             int current_row_group;                                              // Current RowGroup that has been read from the input file.
             int current_read_row;                                               // Current Row that has been read from the RowGroup
-            int start_row_group;
-            int num_row_groups;                                                 // The number of row groups in the file that was opened for reading.
+            int start_row_group;                                                // The beginning RowGroup that is read by a worker
+            int num_row_groups;                                                 // The number of RowGroups to be read by the worker from the file that was opened for reading.
             int64_t numRows;                                                    // The number of result rows in a given RowGroup read from the parquet file.
             size_t batch_size;                                                  // batch_size for converting Parquet Columns to ECL rows. It is more efficient to break the data into small batches for converting to rows than to convert all at once.
             bool partition;                                                     // Boolean variable to track whether we are writing partitioned files or not.

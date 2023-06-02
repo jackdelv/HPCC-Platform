@@ -311,18 +311,22 @@ namespace parquetembed
         // the configuration will show up in activityCtx->numSlaves()
         if (workers > 1)
         {
+            // If the number of workers goes into total_row_groups evenly then every worker gets the same amount
+            // of rows to read
             if (total_row_groups % workers == 0)
             {
                 num_row_groups = total_row_groups / workers;
                 current_row_group = num_row_groups * worker_id;
                 start_row_group = current_row_group;
             }
+            // If the total_row_groups is not evenly divisible by the number of workers then we divide them up
+            // with the first n-1 workers getting slightly more and the nth worker gets the remainder
             else if (total_row_groups > workers)
             {
                 if (worker_id == (workers - 1)) 
                 {
                     num_row_groups = total_row_groups - (std::ceil(total_row_groups / workers) * (workers - 1));
-                    current_row_group = num_row_groups * worker_id;
+                    current_row_group = std::ceil(total_row_groups / workers) * worker_id;
                     start_row_group = current_row_group;
                 }
                 else
@@ -332,6 +336,8 @@ namespace parquetembed
                     start_row_group = current_row_group;
                 }
             }
+            // If the number of total_row_groups is less than the number of workers we give as many as possible
+            // a single row group to read.
             else
             {
                 if (worker_id < total_row_groups)

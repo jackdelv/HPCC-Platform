@@ -134,11 +134,7 @@ namespace parquetembed
         parquet_doc = std::vector<rapidjson::Document>(rowsize);
         current_row = 0;
 
-        // TODO think of a better scheme for setting multiple read/write
-        if (strlen(option) == 2 && option[1])
-            partition = (option[1] == 'M' || option[1] == 'm');
-        else
-            partition = false;
+        partition = strlen(option) > 5;
     }
 
     ParquetHelper::~ParquetHelper()
@@ -219,7 +215,10 @@ namespace parquetembed
         if (partition)
         {
             // Create a filesystem
-            std::shared_ptr<arrow::fs::LocalFileSystem> fs = std::make_shared<arrow::fs::LocalFileSystem>();
+            std::shared_ptr<arrow::fs::FileSystem> fs;
+            ARROW_ASSIGN_OR_RAISE(fs, arrow::fs::FileSystemFromUriOrPath(location));
+
+            // FileSelector allows traversal of multi-file dataset
             arrow::fs::FileSelector selector;
             selector.base_dir = location; // The base directory to be searched is provided by the user in the location option.
             selector.recursive = true;      // Selector will search the base path recursively for partitioned files.
@@ -227,18 +226,16 @@ namespace parquetembed
             // Create a file format
             std::shared_ptr<arrow::dataset::ParquetFileFormat> format = std::make_shared<arrow::dataset::ParquetFileFormat>();
 
-            // Create the partitioning factory.
-            // TO DO look into other partioning types.
-            std::shared_ptr<arrow::dataset::PartitioningFactory> partitioning_factory = arrow::dataset::HivePartitioning::MakeFactory();
-
             arrow::dataset::FileSystemFactoryOptions options;
-            options.partitioning = partitioning_factory;
+            options.partitioning = arrow::dataset::HivePartitioning::MakeFactory(); // TODO set other partitioning types
 
             // Create the dataset factory
             PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::DatasetFactory> dataset_factory, arrow::dataset::FileSystemDatasetFactory::Make(fs, selector, format, options));
 
-            // Get dataset
-            PARQUET_ASSIGN_OR_THROW(dataset, dataset_factory->Finish());
+            // Get scanner
+            PARQUET_ASSIGN_OR_THROW(auto dataset, dataset_factory->Finish());
+            ARROW_ASSIGN_OR_RAISE(auto scan_builder, dataset->NewScan());
+            ARROW_ASSIGN_OR_RAISE(scanner, scan_builder->Finish());
         }
         else
         {
@@ -370,17 +367,32 @@ namespace parquetembed
     {
         if (partition)
         {
-            // This should be changed as well, so we can get a RecordBatchReader from the scanner rather than
-            // read it all into a single table.
-            // Create a scanner
-            arrow::dataset::ScannerBuilder scanner_builder(dataset);
-            reportIfFailure(scanner_builder.Pool(pool));
-            PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::dataset::Scanner> scanner, scanner_builder.Finish());
+            int total_row_groups = scanner->CountRows().ValueOrDie();
+            divide_row_groups(activityCtx, total_row_groups, num_row_groups, current_row_group, start_row_group);
 
-            // Scan the dataset
-            PARQUET_ASSIGN_OR_THROW(std::shared_ptr<arrow::Table> table, scanner->ToTable());
-            numRows = table->num_rows();
-            parquet_table = table;
+            arrow::Int64Builder builder;
+            std::int64_t start = start_row_group;
+            while (start < (num_row_groups + start_row_group))
+            {
+                builder.Append(start++);
+            }
+
+
+            current_read_row = 0;
+            if (num_row_groups != 0)
+            {
+                {
+                    CriticalBlock block(parquetembed::fileLock);
+
+                    parquet_table = scanner->TakeRows(*(builder.Finish().ValueOrDie().get())).ValueOrDie();
+                }
+                numRows = parquet_table->num_rows();
+                setIterator();
+            }
+            else
+            {
+                numRows = 0;
+            }
         }
         else
         {
@@ -501,7 +513,7 @@ namespace parquetembed
         ARROW_ASSIGN_OR_RAISE(batch, batch_builder->Flush());
 
         // Use RecordBatch::ValidateFull() to make sure arrays were correctly constructed.
-        DCHECK_OK(batch->ValidateFull());
+        reportIfFailure(batch->ValidateFull());
         return batch;
     }
 
@@ -1263,7 +1275,7 @@ namespace parquetembed
         rtlUtf8ToUtf8X(utf8chars, utf8.refstr(), len, value);
 
         rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
-        rapidjson::Value val = rapidjson::Value(std::string(utf8.getstr(), rtlUtf8Size(utf8chars, utf8.getdata())), jsonAlloc);
+        rapidjson::Value val = rapidjson::Value(std::string(utf8.getstr(), utf8chars), jsonAlloc);
 
         r_parquet->doc()->AddMember(key, val, jsonAlloc);
     }
@@ -1278,8 +1290,12 @@ namespace parquetembed
      */
     void bindStringParam(unsigned len, const char *value, const RtlFieldInfo * field, std::shared_ptr<ParquetHelper> r_parquet)
     {
+        size32_t utf8chars;
+        rtlDataAttr utf8;
+        rtlStrToUtf8X(utf8chars, utf8.refstr(), len, value);
+        
         rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
-        rapidjson::Value val = rapidjson::Value(std::string(value, len), jsonAlloc);
+        rapidjson::Value val = rapidjson::Value(std::string(utf8.getstr(), utf8chars), jsonAlloc);
 
         r_parquet->doc()->AddMember(key, val, jsonAlloc);
     }
@@ -1542,7 +1558,7 @@ namespace parquetembed
     : logctx(_logctx), m_NextRow(), m_nextParam(0), m_numParams(0), m_scriptFlags(_flags)
     {
         // Option Variables
-        const char *option = ""; // Read(r), Write(w)
+        const char *option = ""; // Read(read), Read Parition(readpartition), Write(write), Write Partition(writepartition)
         const char *location = ""; // file name and location of where to write parquet file
         const char *destination = ""; // file name and location of where to read parquet file from
         const char *partDir = ""; // Directory to be created when writing partitioned data.

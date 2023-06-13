@@ -19,6 +19,12 @@ SHARED ParquetService := SERVICE : plugin('parquetembed')
   BOOLEAN getEmbedContext():cpp, pure, namespace='parquetembed', entrypoint='getEmbedContext', prototype='IEmbedContext* getEmbedContext()';
 END;
 
+EXPORT ReadPartition(resultLayout, basePath) := FUNCTIONMACRO
+    STREAMED DATASET(resultLayout) _DoParquetPartitionRead() := EMBED(parquet: activity, option('readpartition'), location(basePath))
+    ENDEMBED;
+    RETURN _DoParquetPartitionRead();
+ENDMACRO;
+
 EXPORT Read(resultLayout, filePath) := FUNCTIONMACRO
     STREAMED DATASET(resultLayout) _DoParquetRead() := EMBED(parquet : activity, option('read'), location(filePath))
     ENDEMBED;

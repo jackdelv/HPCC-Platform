@@ -707,7 +707,7 @@ namespace parquetembed
             std::unique_ptr<parquet::arrow::FileWriter> writer;                 // FileWriter for writing to parquet files.
             std::vector<rapidjson::Document> parquet_doc;                       // Document vector for converting rows to columns for writing to parquet files.
             std::vector<rapidjson::Value> row_stack;                            // Stack for keeping track of the context when building a nested row.
-            std::shared_ptr<arrow::dataset::Dataset> dataset = nullptr;         // Dataset for holding information of partitioned files. PARTITION
+            std::shared_ptr<arrow::dataset::Scanner> scanner = nullptr;         // Scanner for reading through partitioned files. PARTITION
             arrow::dataset::FileSystemDatasetWriteOptions write_options;        // Write options for writing partitioned files. PARTITION
             std::unique_ptr<parquet::arrow::FileReader> parquet_read;           // FileReader for reading from parquet files.
             std::shared_ptr<arrow::Table> parquet_table = nullptr;              // Table for creating the iterator for outputing result rows.

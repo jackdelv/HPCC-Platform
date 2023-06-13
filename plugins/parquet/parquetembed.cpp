@@ -485,7 +485,7 @@ namespace parquetembed
         std::unique_ptr<arrow::RecordBatchBuilder> batch_builder;
         ARROW_ASSIGN_OR_RAISE(
             batch_builder,
-            arrow::RecordBatchBuilder::Make(schema, arrow::default_memory_pool(), rows.size()));
+            arrow::RecordBatchBuilder::Make(schema, pool, rows.size()));
 
         // Inner converter will take rows and be responsible for appending values
         // to provided array builders.

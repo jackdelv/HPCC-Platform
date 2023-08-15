@@ -15,11 +15,9 @@
         },
         {
             "name": "arrow",
-            "default-features": false,
+            "default-features": true,
             "features": [
-                "dataset",
-                "parquet",
-                "filesystem"
+                "dataset"
             ]
         },
         "azure-storage-blobs-cpp",

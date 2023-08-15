@@ -30,7 +30,7 @@ if(PARQUETEMBED)
     ADD_PLUGIN(parquetembed)
     if(MAKE_PARQUETEMBED)
         find_package(Arrow REQUIRED)
-        find_package(Parquet REQUIRED)
+        #find_package(Parquet REQUIRED)
         find_library(ARROWDATASET arrow_dataset ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib REQUIRED)
         list(APPEND CMAKE_INSTALL_RPATH ${CMAKE_BINARY_DIR}/vcpkg_installed/x64-linux-dynamic/lib)
 
@@ -57,16 +57,16 @@ if(PARQUETEMBED)
             DESTINATION plugins CALC_DEPS
         )
 
-        install(
-            FILES ${LIBPARQUET_LIB_REAL}
-            DESTINATION ${LIB_DIR} CALC_DEPS
-            PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
-            COMPONENT Runtime)
+        # install(
+        #     FILES ${LIBPARQUET_LIB_REAL}
+        #     DESTINATION ${LIB_DIR} CALC_DEPS
+        #     PERMISSIONS OWNER_WRITE OWNER_READ OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE
+        #     COMPONENT Runtime)
 
-        install(
-            FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
-            DESTINATION ${LIB_DIR} CALC_DEPS
-            COMPONENT Runtime)
+        # install(
+        #     FILES ${LIBPARQUET_LIB} ${LIBPARQUET_LIB_ABI}
+        #     DESTINATION ${LIB_DIR} CALC_DEPS
+        #     COMPONENT Runtime)
 
         install(
             FILES ${LIBARROW_LIB_REAL}
@@ -83,7 +83,7 @@ if(PARQUETEMBED)
             parquetembed
             eclrtl
             jlib
-            Parquet::parquet_shared
+#            Parquet::parquet_shared
             Arrow::arrow_shared
             ${ARROWDATASET}
         )

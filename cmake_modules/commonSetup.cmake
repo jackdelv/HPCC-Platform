@@ -180,6 +180,7 @@ IF ("${COMMONSETUP_DONE}" STREQUAL "")
         MEMCACHED
         MONGODBEMBED
         MYSQLEMBED
+        PARQUETEMBED
         REDIS
         REMBED
         SPARK

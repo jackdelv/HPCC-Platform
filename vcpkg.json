@@ -13,6 +13,15 @@
                 "sqs"
             ]
         },
+        {
+            "name": "arrow",
+            "default-features": false,
+            "features": [
+                "dataset",
+                "parquet",
+                "filesystem"
+            ]
+        },
         "azure-storage-blobs-cpp",
         "azure-storage-files-shares-cpp",
         "boost-property-tree",

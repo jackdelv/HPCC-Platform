@@ -58,7 +58,6 @@
             "name": "libmysql",
             "platform": "!(windows & x86)"
         },
-        "librdkafka",
         "libuv",
         "libxml2",
         {

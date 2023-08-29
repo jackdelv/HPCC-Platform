@@ -230,13 +230,6 @@ arrow::Status ParquetHelper::openReadFile()
         }
         ARROW_ASSIGN_OR_RAISE(auto input, arrow::io::ReadableFile::Open(location));
         reportIfFailure(parquet::arrow::OpenFile(input, pool, &parquet_read));
-    //     auto reader_properties = parquet::ReaderProperties(pool);
-    //     auto arrow_reader_props = parquet::ArrowReaderProperties();
-    //     parquet::arrow::FileReaderBuilder reader_builder;
-    //     reportIfFailure(reader_builder.OpenFile(location, false, reader_properties));
-    //     reader_builder.memory_pool(pool);
-    //     reader_builder.properties(arrow_reader_props);
-    //     ARROW_ASSIGN_OR_RAISE(parquet_read, reader_builder.Build());
     }
     return arrow::Status::OK();
 }
@@ -1003,7 +996,8 @@ void ParquetRowBuilder::getStringResult(const RtlFieldInfo *field, size32_t &cha
     {
         auto i = !m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet ? m_pathStack.back().childrenProcessed++ : currentRow;
         auto view = (*array_visitor)->string_arr->GetView(i);
-        rtlStrToStrX(chars, result, view.size(), view.data());
+        unsigned numchars = rtlUtf8Length(view.size(), view.data());
+        rtlUtf8ToStrX(chars, result, numchars, view.data());
         return;
     }
     else
@@ -1604,8 +1598,8 @@ ParquetEmbedFunctionContext::ParquetEmbedFunctionContext(const IContextLogger &_
     const char *option = "";      // Read(read), Read Parition(readpartition), Write(write), Write Partition(writepartition)
     const char *location = "";    // file name and location of where to write parquet file
     const char *destination = ""; // file name and location of where to read parquet file from
-    __int64 rowsize = 2000000;    // Size of the row groups when writing to parquet files
-    __int64 batchSize = 2000000;  // Size of the batches when converting parquet columns to rows
+    __int64 rowsize = 40000;    // Size of the row groups when writing to parquet files
+    __int64 batchSize = 40000;  // Size of the batches when converting parquet columns to rows
     // Iterate through user options and save them
     StringArray inputOptions;
     inputOptions.appendList(options, ",");

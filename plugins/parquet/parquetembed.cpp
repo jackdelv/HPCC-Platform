@@ -649,10 +649,7 @@ arrow::Status ParquetHelper::FieldToNode(const std::string &name, const RtlField
         arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
         break;
     case type_decimal:
-        // The second parameter, scale, is the number of digits after the decimal point.
-        // I am not sure if the eclhelper function getDecimalDigits() returns the digits after the decimal point or the total digits.
-        // TO DO
-        arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::decimal128(field->type->getDecimalPrecision(), field->type->getDecimalDigits())));
+        arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::utf8()));
         break;
     case type_data:
         arrow_fields.push_back(std::make_shared<arrow::Field>(name, arrow::large_binary()));
@@ -1084,10 +1081,10 @@ void ParquetRowBuilder::getDecimalResult(const RtlFieldInfo *field, Decimal &val
         value.set(p.decimalResult);
         return;
     }
-    if ((*array_visitor)->type == 7)
+    if ((*array_visitor)->type == 5)
     {
         auto i = !m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet ? m_pathStack.back().childrenProcessed++ : currentRow;
-        auto dvalue = (*array_visitor)->dec_arr->GetView(i);
+        auto dvalue = (*array_visitor)->string_arr->GetView(i);
         value.setString(dvalue.size(), dvalue.data());
         RtlDecimalTypeInfo *dtype = (RtlDecimalTypeInfo *)field->type;
         value.setPrecision(dtype->getDecimalDigits(), dtype->getDecimalPrecision());

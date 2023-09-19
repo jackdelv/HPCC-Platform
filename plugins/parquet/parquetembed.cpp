@@ -52,6 +52,8 @@ extern "C" PARQUETEMBED_PLUGIN_API bool getECLPluginDefinition(ECLPluginDefiniti
 
 namespace parquetembed
 {
+static thread_local rapidjson::MemoryPoolAllocator<> jsonAlloc;
+
 // //--------------------------------------------------------------------------
 // Plugin Classes
 //--------------------------------------------------------------------------
@@ -114,15 +116,12 @@ ParquetHelper::ParquetHelper(const char *option, const char *_location, const ch
     row_size = rowsize;
     batch_size = _batchSize;
     activityCtx = _activityCtx;
-    rowsProcessed = 0;
-    tablesProcessed = 0;
 
     pool = arrow::default_memory_pool();
 
     parquet_doc = std::vector<rapidjson::Document>(rowsize);
-    current_row = 0;
 
-    partition = strlen(option) > 5;
+    partition = String(option).endsWith("partition");
 }
 
 ParquetHelper::~ParquetHelper()
@@ -749,8 +748,6 @@ void ParquetHelper::end_row(const char *name)
 ParquetRowStream::ParquetRowStream(IEngineRowAllocator *_resultAllocator, std::shared_ptr<ParquetHelper> _parquet)
     : m_resultAllocator(_resultAllocator), s_parquet(_parquet)
 {
-    m_currentRow = 0;
-    m_shouldRead = true;
     rowsCount = _parquet->num_rows();
     array_visitor = std::make_shared<ParquetArrayVisitor>();
 }
@@ -825,12 +822,12 @@ bool ParquetRowBuilder::getBooleanResult(const RtlFieldInfo *field)
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         return p.boolResult;
     }
-    if ((*array_visitor)->type != 1)
+    if ((*array_visitor)->type != BoolType)
     {
         failx("Incorrect type for field %s.", field->name);
     }
@@ -849,13 +846,13 @@ void ParquetRowBuilder::getDataResult(const RtlFieldInfo *field, size32_t &len, 
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         rtlUtf8ToDataX(len, result, p.resultChars, p.stringResult);
         return;
     }
-    if ((*array_visitor)->type == 6)
+    if ((*array_visitor)->type == BinaryType)
     {
         auto i = !m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet ? m_pathStack.back().childrenProcessed++ : currentRow;
         auto view = (*array_visitor)->large_bin_arr->GetView(i);
@@ -878,12 +875,12 @@ double ParquetRowBuilder::getRealResult(const RtlFieldInfo *field)
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         return p.doubleResult;
     }
-    if ((*array_visitor)->type != 10)
+    if ((*array_visitor)->type != DoubleType)
     {
         failx("Incorrect type for field %s.", field->name);
     }
@@ -935,12 +932,12 @@ __int64 ParquetRowBuilder::getSignedResult(const RtlFieldInfo *field)
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         return p.uintResult;
     }
-    if ((*array_visitor)->type != 2)
+    if ((*array_visitor)->type != IntType)
     {
         failx("Incorrect type for field %s.", field->name);
     }
@@ -958,13 +955,13 @@ unsigned __int64 ParquetRowBuilder::getUnsignedResult(const RtlFieldInfo *field)
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
 
         NullFieldProcessor p(field);
         return p.uintResult;
     }
-    if ((*array_visitor)->type != 3)
+    if ((*array_visitor)->type != UIntType)
     {
         failx("Incorrect type for field %s.", field->name);
     }
@@ -983,13 +980,13 @@ void ParquetRowBuilder::getStringResult(const RtlFieldInfo *field, size32_t &cha
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         rtlUtf8ToStrX(chars, result, p.resultChars, p.stringResult);
         return;
     }
-    if ((*array_visitor)->type == 5)
+    if ((*array_visitor)->type == StringType)
     {
         auto i = !m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet ? m_pathStack.back().childrenProcessed++ : currentRow;
         auto view = (*array_visitor)->string_arr->GetView(i);
@@ -1014,13 +1011,13 @@ void ParquetRowBuilder::getUTF8Result(const RtlFieldInfo *field, size32_t &chars
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         rtlUtf8ToUtf8X(chars, result, p.resultChars, p.stringResult);
         return;
     }
-    if ((*array_visitor)->type == 5)
+    if ((*array_visitor)->type == StringType)
     {
         auto i = !m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet ? m_pathStack.back().childrenProcessed++ : currentRow;
         auto view = (*array_visitor)->string_arr->GetView(i);
@@ -1045,13 +1042,13 @@ void ParquetRowBuilder::getUnicodeResult(const RtlFieldInfo *field, size32_t &ch
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         rtlUnicodeToUnicodeX(chars, result, p.resultChars, p.unicodeResult);
         return;
     }
-    if ((*array_visitor)->type == 5)
+    if ((*array_visitor)->type == StringType)
     {
         auto i = !m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet ? m_pathStack.back().childrenProcessed++ : currentRow;
         auto view = (*array_visitor)->string_arr->GetView(i);
@@ -1075,13 +1072,13 @@ void ParquetRowBuilder::getDecimalResult(const RtlFieldInfo *field, Decimal &val
 {
     nextField(field);
 
-    if ((*array_visitor)->type == 0)
+    if ((*array_visitor)->type == NullType)
     {
         NullFieldProcessor p(field);
         value.set(p.decimalResult);
         return;
     }
-    if ((*array_visitor)->type == 5)
+    if ((*array_visitor)->type == StringType)
     {
         auto i = !m_pathStack.empty() && m_pathStack.back().nodeType == CPNTSet ? m_pathStack.back().childrenProcessed++ : currentRow;
         auto dvalue = (*array_visitor)->string_arr->GetView(i);
@@ -1107,7 +1104,7 @@ void ParquetRowBuilder::processBeginSet(const RtlFieldInfo *field, bool &isAll)
     isAll = false; // ALL not supported
     nextField(field);
 
-    if ((*array_visitor)->type == 8)
+    if ((*array_visitor)->type == ListType)
     {
         PathTracker newPathNode(field->name, (*array_visitor)->list_arr, CPNTSet);
         newPathNode.childCount = (*array_visitor)->list_arr->value_slice(currentRow)->length();
@@ -1156,7 +1153,7 @@ void ParquetRowBuilder::processBeginRow(const RtlFieldInfo *field)
         if (strncmp(xpath, "<row>", 5) != 0)
         {
             nextField(field);
-            if ((*array_visitor)->type == 9)
+            if ((*array_visitor)->type == StructType)
             {
                 m_pathStack.push_back(PathTracker(field->name, (*array_visitor)->struct_arr, CPNTScalar));
             }
@@ -1336,7 +1333,10 @@ void bindStringParam(unsigned len, const char *value, const RtlFieldInfo *field,
  */
 void bindBoolParam(bool value, const RtlFieldInfo *field, std::shared_ptr<ParquetHelper> r_parquet)
 {
-    r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), value, jsonAlloc);
+    rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
+    rapidjson::Value val = rapidjson::Value(value);
+
+    addMember(r_parquet, key, val);
 }
 
 /**
@@ -1359,7 +1359,7 @@ void bindDataParam(unsigned len, const char *value, const RtlFieldInfo *field, s
     rapidjson::Value val;
     val.SetString(data.getstr(), utf8len, jsonAlloc);
 
-    r_parquet->doc()->AddMember(key, val, jsonAlloc);
+    addMember(r_parquet, key, val);
 }
 
 /**
@@ -1376,7 +1376,7 @@ void bindIntParam(__int64 value, const RtlFieldInfo *field, std::shared_ptr<Parq
     rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
     rapidjson::Value num(val);
 
-    r_parquet->doc()->AddMember(key, num, jsonAlloc);
+    addMember(r_parquet, key, num);
 }
 
 /**
@@ -1393,7 +1393,7 @@ void bindUIntParam(unsigned __int64 value, const RtlFieldInfo *field, std::share
     rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
     rapidjson::Value num(val);
 
-    r_parquet->doc()->AddMember(key, num, jsonAlloc);
+    addMember(r_parquet, key, num);
 }
 
 /**
@@ -1405,7 +1405,10 @@ void bindUIntParam(unsigned __int64 value, const RtlFieldInfo *field, std::share
  */
 void bindRealParam(double value, const RtlFieldInfo *field, std::shared_ptr<ParquetHelper> r_parquet)
 {
-    r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), value, jsonAlloc);
+    rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
+    rapidjson::Value val = rapidjson::Value(value);
+
+    addMember(r_parquet, key, val);
 }
 
 /**
@@ -1422,7 +1425,10 @@ void bindUnicodeParam(unsigned chars, const UChar *value, const RtlFieldInfo *fi
     char *utf8;
     rtlUnicodeToUtf8X(utf8chars, utf8, chars, value);
 
-    r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), rapidjson::Value(utf8, jsonAlloc).Move(), jsonAlloc);
+    rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
+    rapidjson::Value val = rapidjson::Value(utf8, jsonAlloc);
+
+    addMember(r_parquet, key, val);
 }
 
 /**
@@ -1432,9 +1438,12 @@ void bindUnicodeParam(unsigned chars, const UChar *value, const RtlFieldInfo *fi
  * @param field RtlFieldInfo holds meta information about the embed context.
  * @param r_parquet Shared pointer to helper class that operates the parquet functions for us.
  */
-void bindDecimalParam(std::string value, const RtlFieldInfo *field, std::shared_ptr<ParquetHelper> r_parquet)
+void bindDecimalParam(const char *value, size32_t bytes, const RtlFieldInfo *field, std::shared_ptr<ParquetHelper> r_parquet)
 {
-    r_parquet->doc()->AddMember(rapidjson::Value(field->name, jsonAlloc).Move(), value, jsonAlloc);
+    rapidjson::Value key = rapidjson::Value(field->name, jsonAlloc);
+    rapidjson::Value val = rapidjson::Value(std::string(value, bytes), jsonAlloc);
+
+    addMember(r_parquet, key, val);
 }
 
 /**
@@ -1538,7 +1547,7 @@ void ParquetRecordBinder::processDecimal(const void *value, unsigned digits, uns
     val.setDecimal(digits, precision, value);
     val.getStringX(bytes, decText.refstr());
 
-    bindDecimalParam(decText.getstr(), field, r_parquet);
+    bindDecimalParam(decText.getstr(), bytes, field, r_parquet);
 }
 
 /**
@@ -1820,6 +1829,66 @@ unsigned ParquetEmbedFunctionContext::checkNextParam(const char *name)
     if (m_nextParam == m_numParams)
         failx("Too many parameters supplied: No matching $<name> placeholder for parameter %s", name);
     return m_nextParam++;
+}
+
+/**
+ * @brief Gets the next ECL row.
+ *
+ * @return true If there is a row to process.
+ * @return false If there are no rows left.
+ */
+bool ParquetDatasetBinder::bindNext()
+{
+    roxiemem::OwnedConstRoxieRow nextRow = (const byte *)input->ungroupedNextRow();
+    if (!nextRow)
+        return false;
+    processRow((const byte *)nextRow.get()); // Bind the variables for the current row
+    return true;
+}
+
+void ParquetDatasetBinder::writeRecordBatch()
+{
+    // convert row_batch vector to RecordBatch and write to file.
+    PARQUET_ASSIGN_OR_THROW(auto record_batch, d_parquet->ConvertToRecordBatch(*(d_parquet->record_batch()), d_parquet->getSchema()));
+    // Write each batch as a row_groups
+    PARQUET_ASSIGN_OR_THROW(auto table, arrow::Table::FromRecordBatches(d_parquet->getSchema(), {record_batch}));
+
+    if (partition)
+    {
+        reportIfFailure(d_parquet->writePartition(table));
+    }
+    else
+    {
+        CriticalBlock block(fileLock);
+        reportIfFailure(d_parquet->write()->get()->WriteTable(*(table.get()), record_batch->num_rows()));
+    }
+}
+
+/**
+ * @brief Binds all the rows of the dataset and executes the function.
+ */
+void ParquetDatasetBinder::executeAll()
+{
+    reportIfFailure(d_parquet->openWriteFile());
+
+    int i = 1;
+    int row_size = d_parquet->getMaxRowSize();
+    for (; bindNext(); d_parquet->update_row(), i++)
+    {
+        if (i % row_size == 0)
+        {
+            writeRecordBatch();
+            jsonAlloc.Clear();
+        }
+    }
+
+    i--;
+    if (i % row_size != 0)
+    {
+        d_parquet->record_batch()->resize(i % row_size);
+        writeRecordBatch();
+        jsonAlloc.Clear();
+    }
 }
 
 /**

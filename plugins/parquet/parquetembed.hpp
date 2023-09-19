@@ -46,7 +46,6 @@
 
 namespace parquetembed
 {
-static thread_local rapidjson::MemoryPoolAllocator<> jsonAlloc;
 static CriticalSection fileLock;
 
 extern void UNSUPPORTED(const char *feature) __attribute__((noreturn));
@@ -119,15 +118,26 @@ struct PathTracker
     const char *nodeName;
     PathNodeType nodeType;
     const arrow::Array *structPtr;
-    unsigned int childCount;
-    unsigned int childrenProcessed;
+    unsigned int childCount = 0;
+    unsigned int childrenProcessed = 0;
 
     PathTracker(const char *_nodeName, const arrow::Array *_struct, PathNodeType _nodeType)
-        : nodeName(_nodeName), nodeType(_nodeType), structPtr(_struct), childCount(0), childrenProcessed(0) {}
+        : nodeName(_nodeName), nodeType(_nodeType), structPtr(_struct) {}
+};
 
-    // Copy constructor
-    PathTracker(const PathTracker &other)
-        : nodeName(other.nodeName), nodeType(other.nodeType), structPtr(other.structPtr), childCount(other.childCount), childrenProcessed(other.childrenProcessed) {}
+enum ParquetArrayType
+{
+    NullType,
+    BoolType,
+    IntType,
+    UIntType,
+    FloatType,
+    StringType,
+    BinaryType,
+    Decimal128Type,
+    ListType,
+    StructType,
+    DoubleType
 };
 
 class ParquetArrayVisitor : public arrow::ArrayVisitor
@@ -135,123 +145,121 @@ class ParquetArrayVisitor : public arrow::ArrayVisitor
 public:
     arrow::Status Visit(const arrow::NullArray &array)
     {
-        type = 0;
+        type = NullType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::BooleanArray &array)
     {
         bool_arr = &array;
-        type = 1;
+        type = BoolType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::Int8Array &array)
     {
         int8_arr = &array;
-        type = 2;
+        type = IntType;
         size = 8;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::Int16Array &array)
     {
         int16_arr = &array;
-        type = 2;
+        type = IntType;
         size = 16;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::Int32Array &array)
     {
         int32_arr = &array;
-        type = 2;
+        type = IntType;
         size = 32;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::Int64Array &array)
     {
         int64_arr = &array;
-        type = 2;
+        type = IntType;
         size = 64;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::UInt8Array &array)
     {
         uint8_arr = &array;
-        type = 3;
+        type = UIntType;
         size = 8;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::UInt16Array &array)
     {
         uint16_arr = &array;
-        type = 3;
+        type = UIntType;
         size = 16;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::UInt32Array &array)
     {
         uint32_arr = &array;
-        type = 3;
+        type = UIntType;
         size = 32;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::UInt64Array &array)
     {
         uint64_arr = &array;
-        type = 3;
+        type = UIntType;
         size = 64;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::FloatArray &array)
     {
         float_arr = &array;
-        type = 4;
+        type = FloatType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::DoubleArray &array)
     {
         double_arr = &array;
-        type = 10;
+        type = DoubleType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::StringArray &array)
     {
         string_arr = &array;
-        type = 5;
+        type = StringType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::BinaryArray &array)
     {
         bin_arr = &array;
-        type = 6;
+        type = BinaryType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::LargeBinaryArray &array)
     {
         large_bin_arr = &array;
-        type = 6;
+        type = BinaryType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::Decimal128Array &array)
     {
         dec_arr = &array;
-        type = 7;
+        type = Decimal128Type;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::ListArray &array)
     {
         list_arr = &array;
-        type = 8;
+        type = ListType;
         return arrow::Status::OK();
     }
     arrow::Status Visit(const arrow::StructArray &array)
     {
         struct_arr = &array;
-        type = 9;
+        type = StructType;
         return arrow::Status::OK();
     }
 
-    int type = 0; // 0 = null, 1 = bool, 2 = Int, 3 = UInt, 4 = Float
-                    // 5 = String, 6 = Binary, 7 = Decimal128, 8 = List, 9 = Struct
-                    // 10 = Double
+    ParquetArrayType type = NullType;
     int size = 0;
     const arrow::BooleanArray *bool_arr = nullptr;
     const arrow::Int8Array *int8_arr = nullptr;
@@ -394,7 +402,7 @@ class JsonValueConverter
 {
 public:
     explicit JsonValueConverter(const std::vector<rapidjson::Document> &rows)
-        : rows_(rows), array_levels_(0) {}
+        : rows_(rows) {}
 
     JsonValueConverter(const std::vector<rapidjson::Document> &rows, const std::vector<std::string> &root_path, int64_t array_levels)
         : rows_(rows), root_path_(root_path), array_levels_(array_levels) {}
@@ -673,7 +681,7 @@ private:
     arrow::ArrayBuilder *builder_;
     const std::vector<rapidjson::Document> &rows_;
     std::vector<std::string> root_path_;
-    int64_t array_levels_;
+    int64_t array_levels_ = 0;
 
     /// Return a flattened iterator over values at nested location
     arrow::Iterator<const rapidjson::Value *> FieldValues()
@@ -729,10 +737,10 @@ public:
     void end_row(const char *name);
 
 private:
-    __int64 current_row;
+    __int64 current_row = 0;
     __int64 row_size;                                             // The maximum size of each parquet row group.
-    __int64 tablesProcessed;                                      // Current RowGroup that has been read from the input file.
-    __int64 rowsProcessed;                                        // Current Row that has been read from the RowGroup
+    __int64 tablesProcessed = 0;                                      // Current RowGroup that has been read from the input file.
+    __int64 rowsProcessed = 0;                                        // Current Row that has been read from the RowGroup
     __int64 start_row_group;                                      // The beginning RowGroup that is read by a worker
     __int64 tableCount;                                           // The number of RowGroups to be read by the worker from the file that was opened for reading.
     __int64 rowsCount;                                            // The number of result rows in a given RowGroup read from the parquet file.
@@ -747,7 +755,7 @@ private:
     std::vector<rapidjson::Document> parquet_doc;                 // Document vector for converting rows to columns for writing to parquet files.
     std::vector<rapidjson::Value> row_stack;                      // Stack for keeping track of the context when building a nested row.
     std::shared_ptr<arrow::dataset::Scanner> scanner = nullptr;   // Scanner for reading through partitioned files. PARTITION
-    arrow::dataset::FileSystemDatasetWriteOptions write_options;  // Write options for writing partitioned files. PARTITION
+    arrow::dataset::FileSystemDatasetWriteOptions write_options;        // Write options for writing partitioned files. PARTITION
     std::shared_ptr<arrow::RecordBatchReader> rbatch_reader = nullptr;
     arrow::RecordBatchReader::RecordBatchReaderIterator rbatch_itr;
     std::unique_ptr<parquet::arrow::FileReader> parquet_read = nullptr; // FileReader for reading from parquet files.
@@ -771,8 +779,8 @@ public:
 
 private:
     Linked<IEngineRowAllocator> m_resultAllocator; //! Pointer to allocator used when building result rows.
-    bool m_shouldRead;                             //! If true, we should continue trying to read more messages.
-    __int64 m_currentRow;                          //! Current result row.
+    bool m_shouldRead = true;                             //! If true, we should continue trying to read more messages.
+    __int64 m_currentRow = 0;                          //! Current result row.
     __int64 rowsCount;                             //! Number of result rows read from parquet file.
     std::shared_ptr<ParquetArrayVisitor> array_visitor;
     std::shared_ptr<ParquetHelper> s_parquet; //! Shared pointer to ParquetHelper class for the stream class.
@@ -921,71 +929,13 @@ public:
         : input(_input), ParquetRecordBinder(_logctx, _typeInfo, _firstParam, _parquet)
     {
         d_parquet = _parquet;
-        // getFieldTypes(_typeInfo);
-
         reportIfFailure(d_parquet->fieldsToSchema(_typeInfo));
     }
     virtual ~ParquetDatasetBinder() = default;
     void getFieldTypes(const RtlTypeInfo *typeInfo);
-
-    /**
-     * @brief Gets the next ECL row.
-     *
-     * @return true If there is a row to process.
-     * @return false If there are no rows left.
-     */
-    bool bindNext()
-    {
-        roxiemem::OwnedConstRoxieRow nextRow = (const byte *)input->ungroupedNextRow();
-        if (!nextRow)
-            return false;
-        processRow((const byte *)nextRow.get()); // Bind the variables for the current row
-        return true;
-    }
-
-    void writeRecordBatch()
-    {
-        // convert row_batch vector to RecordBatch and write to file.
-        PARQUET_ASSIGN_OR_THROW(auto record_batch, d_parquet->ConvertToRecordBatch(*(d_parquet->record_batch()), d_parquet->getSchema()));
-        // Write each batch as a row_groups
-        PARQUET_ASSIGN_OR_THROW(auto table, arrow::Table::FromRecordBatches(d_parquet->getSchema(), {record_batch}));
-
-        if (partition)
-        {
-            reportIfFailure(d_parquet->writePartition(table));
-        }
-        else
-        {
-            CriticalBlock block(fileLock);
-            reportIfFailure(d_parquet->write()->get()->WriteTable(*(table.get()), record_batch->num_rows()));
-        }
-    }
-
-    /**
-     * @brief Binds all the rows of the dataset and executes the function.
-     */
-    void executeAll()
-    {
-        reportIfFailure(d_parquet->openWriteFile());
-
-        int i = 1;
-        int row_size = d_parquet->getMaxRowSize();
-        for (; bindNext(); d_parquet->update_row(), i++)
-        {
-            if (i % row_size == 0)
-            {
-                writeRecordBatch();
-                jsonAlloc.Clear();
-            }
-        }
-
-        if (--i % row_size != 0)
-        {
-            d_parquet->record_batch()->resize(i % row_size);
-            writeRecordBatch();
-            jsonAlloc.Clear();
-        }
-    }
+    bool bindNext();
+    void writeRecordBatch();
+    void executeAll();
 
 protected:
     Owned<IRowStream> input;

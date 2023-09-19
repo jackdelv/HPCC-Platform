@@ -25,5 +25,5 @@ Write(csv_data, '/datadrive/dev/test_data/ghtorrent-2019-02-04.parquet');
 
 #IF(1)
 parquet_data := Read(layout, '/datadrive/dev/test_data/hpcc_gh_partition/data.parquet');
-OUTPUT(COUNT(parquet_data), NAMED('ghtorrent_2019_01_07'));
+COUNT(parquet_data);
 #END

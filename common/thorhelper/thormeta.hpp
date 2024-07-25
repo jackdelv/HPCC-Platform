@@ -162,7 +162,7 @@ public:
 
 //The following class is always used to access a collection of files - even if it is only a single physical file.
 class CDfsLogicalFileName;
-class THORHELPER_API CLogicalFileCollection
+class THORHELPER_API CLogicalFileCollection : implements serializable
 {
 public:
     CLogicalFileCollection() = default;
@@ -173,6 +173,9 @@ public:
     void serialize(MemoryBuffer & out) const;
     void setEclFilename(const char * filename, IPropertyTree * helperOptions);
     void setTempFilename(const char * filename, IPropertyTree * helperOptions, const IPropertyTree * spillPlane);
+
+    void serialize(MemoryBuffer & out) override;
+    void deserialize(MemoryBuffer & in) override;
 
 protected:
     void appendFile(CLogicalFile & file);

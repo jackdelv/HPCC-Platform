@@ -150,7 +150,6 @@ bool CLogicalFile::onAttachedStorage(unsigned copy) const
     return queryPlane(copy)->isAttachedStorage();
 }
 
-
 //expand name as path, e.g. copy and translate :: into /
 StringBuffer & CLogicalFile::expandLogicalAsPhysical(StringBuffer & target, unsigned copy) const
 {
@@ -292,6 +291,79 @@ StringBuffer & CLogicalFileSlice::getTracingFilename(StringBuffer & out) const
 }
 
 //---------------------------------------------------------------------------------------------------------------------
+
+void CLogicalFileCollection::serialize(MemoryBuffer & out)
+{
+    out.append(wuid);
+    if (context)
+        context->serialize(out);
+    else
+        out.append((unsigned)0);
+    if (user)
+        user->serialize(out);
+    else
+        out.append((unsigned)0);
+    if (expectedMeta)
+        expectedMeta->serialize(out);
+    else
+        out.append((unsigned)0);
+    out.append(isTemporary);
+    out.append(isCodeSigned);
+    out.append(resolveLocally);
+    out.append(filename);
+    helperOptions->serialize(out);
+    resolved->serialize(out);
+    storageSystems.serialize(out);
+    ForEachItemIn(i, files)
+        files.item(i).serialize(out);
+    out.append(totalSize);
+    out.append(maxParts);
+}
+
+void CLogicalFileCollection::deserialize(MemoryBuffer & in)
+{
+    in.read(wuid);
+    unsigned contextFlag;
+    in.read(contextFlag);
+    if (contextFlag)
+        context = createFileCollectionContext(in);
+    else
+        context = nullptr;
+
+    unsigned userFlag;
+    in.read(userFlag);
+    if (userFlag)
+        user = createUserDescriptor(in);
+    else
+        user = nullptr;
+
+    unsigned metaFlag;
+    in.read(metaFlag);
+    if (metaFlag)
+    {
+        expectedMeta = createOutputMetaData(in);
+    }
+    else
+        expectedMeta = nullptr;
+
+    in.read(isTemporary);
+    in.read(isCodeSigned);
+    in.read(resolveLocally);
+    in.read(filename);
+    helperOptions.setown(createPTreeFromBuffer(in));
+    resolved.setown(createPTreeFromBuffer(in));
+    storageSystems.deserialize(in);
+
+    unsigned numFiles;
+    in.read(numFiles);
+    for (unsigned i=0; i < numFiles; i++)
+    {
+        files.emplace_back(storageSystems, in, expectedMeta);
+    }
+
+    in.read(totalSize);
+    in.read(maxParts);
+}
 
 void CLogicalFileCollection::appendFile(CLogicalFile & file)
 {

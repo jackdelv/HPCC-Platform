@@ -69,7 +69,7 @@ export const LogicalFileSummary: React.FunctionComponent<LogicalFileSummaryProps
 
     React.useEffect(() => {
         setDescription(file?.Description || "");
-        setProtected(file?.ProtectList?.DFUFileProtect?.length > 0 || false);
+        setProtected(isProtected);
         setRestricted(file?.IsRestricted || false);
 
         if ((file?.filePartsOnCluster() ?? []).length > 0) {
@@ -83,7 +83,7 @@ export const LogicalFileSummary: React.FunctionComponent<LogicalFileSummaryProps
             setReplicateFlag(_replicate);
         }
 
-    }, [file]);
+    }, [file, isProtected]);
 
     const canSave = React.useMemo(() => {
         return file && (
@@ -96,15 +96,11 @@ export const LogicalFileSummary: React.FunctionComponent<LogicalFileSummaryProps
     const buttons = React.useMemo((): ICommandBarItemProps[] => [
         {
             key: "refresh", text: nlsHPCC.Refresh, iconProps: { iconName: "Refresh" },
-            onClick: () => {
-                refresh();
-            }
+            onClick: () => refresh()
         },
         {
             key: "copyFilename", text: nlsHPCC.CopyLogicalFilename, iconProps: { iconName: "Copy" },
-            onClick: () => {
-                navigator?.clipboard?.writeText(logicalFile);
-            }
+            onClick: () => navigator?.clipboard?.writeText(logicalFile)
         },
         { key: "divider_1", itemType: ContextualMenuItemType.Divider, onRender: () => <ShortVerticalDivider /> },
         {
@@ -181,7 +177,7 @@ export const LogicalFileSummary: React.FunctionComponent<LogicalFileSummaryProps
             <TableGroup fields={{
                 "Wuid": { label: nlsHPCC.Workunit, type: "link", value: file?.Wuid, href: `#/${isDFUWorkunit ? "dfu" : ""}workunits/${file?.Wuid}`, readonly: true, },
                 "Owner": { label: nlsHPCC.Owner, type: "string", value: file?.Owner, readonly: true },
-                "SuperOwner": { label: nlsHPCC.SuperFile, type: "links", links: file?.Superfiles?.DFULogicalFile?.map(row => ({ label: "", type: "link", value: row.Name, href: `#/files/${row.Name}` })) },
+                "SuperOwner": { label: nlsHPCC.SuperFile, type: "links", links: file?.Superfiles?.DFULogicalFile?.map(row => ({ label: "", type: "link", value: row.Name, href: `#/files/${row.NodeGroup !== null ? row.NodeGroup : undefined}/${row.Name}` })) },
                 "NodeGroup": { label: nlsHPCC.ClusterName, type: "string", value: file?.NodeGroup, readonly: true },
                 "Description": { label: nlsHPCC.Description, type: "string", value: description },
                 "JobName": { label: nlsHPCC.JobName, type: "string", value: file?.JobName, readonly: true },
@@ -216,9 +212,15 @@ export const LogicalFileSummary: React.FunctionComponent<LogicalFileSummaryProps
                         break;
                     case "isProtected":
                         setProtected(value);
+                        file?.update({
+                            Protect: value ? WsDfu.DFUChangeProtection.Protect : WsDfu.DFUChangeProtection.Unprotect,
+                        }).catch(err => logger.error(err));
                         break;
                     case "isRestricted":
                         setRestricted(value);
+                        file?.update({
+                            Restrict: value ? WsDfu.DFUChangeRestriction.Restrict : WsDfu.DFUChangeRestriction.Unrestricted,
+                        }).catch(err => logger.error(err));
                         break;
                 }
             }} />

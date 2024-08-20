@@ -7589,7 +7589,7 @@ public:
     {
         inotifyFd = inotify_init1(IN_NONBLOCK|IN_CLOEXEC);
         if (-1 == inotifyFd)
-            throw makeStringException(-1, "CFileEventWatcher - inotify_init1");
+            throw makeErrnoException(-1, "CFileEventWatcher - inotify_init1");
 
         if (pipe2(pipefd, O_NONBLOCK|O_CLOEXEC))
             throw makeErrnoException(-1, "CFileEventWatcher - create pipe failed");
@@ -7961,9 +7961,12 @@ unsigned __int64 getPlaneAttributeValue(const char *planeName, PlaneAttributeTyp
     CriticalBlock b(planeAttriubuteMapCrit);
     auto it = planeAttributesMap.find(planeName);
     if (it != planeAttributesMap.end())
-        return it->second[planeAttrType];
-    else
-        return defaultValue;
+    {
+        unsigned v = it->second[planeAttrType];
+        if (v) // a plane attribute value of 0 is considered as not set
+            return v;
+    }
+    return defaultValue;
 }
 
 size32_t getBlockedFileIOSize(const char *planeName, size32_t defaultSize)

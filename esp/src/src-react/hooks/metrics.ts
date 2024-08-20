@@ -7,25 +7,14 @@ import { useWorkunit } from "./workunit";
 import { useQuery } from "./query";
 import { useCounter } from "./util";
 
-const logger = scopedLogger("src-react\hooks\metrics.ts");
+const logger = scopedLogger("src-react/hooks/metrics.ts");
 
-const defaults = {
-    scopeTypes: ["graph", "subgraph", "activity", "edge"],
-    properties: ["TimeElapsed"],
-    ignoreGlobalStoreOutEdges: true,
-    subgraphTpl: "%id% - %TimeElapsed%",
-    activityTpl: "%Label%",
-    edgeTpl: "%Label%\n%NumRowsProcessed%\n%SkewMinRowsProcessed% / %SkewMaxRowsProcessed%",
-    layout: undefined
-};
+const METRIC_OPTIONS_VERSION = 2;
+const METRIC_OPTIONS_KEY = `MetricOptions-${METRIC_OPTIONS_VERSION}`;
 
-const options = { ...defaults };
-
-function checkLayout(options: MetricsOptions): boolean {
-    if (options?.layout && !options?.layout?.["main"]) {
-        delete options.layout;
-    }
-    return !!options?.layout;
+export function resetMetricsViews() {
+    const store = userKeyValStore();
+    return store?.delete(METRIC_OPTIONS_KEY);
 }
 
 export interface MetricsOptions {
@@ -35,7 +24,30 @@ export interface MetricsOptions {
     subgraphTpl;
     activityTpl;
     edgeTpl;
-    layout?: object
+    sql: string;
+    layout?: object;
+    showTimeline: boolean;
+}
+
+const defaults: MetricsOptions = {
+    scopeTypes: ["graph", "subgraph", "activity", "operation", "workflow"],
+    properties: ["TimeElapsed"],
+    ignoreGlobalStoreOutEdges: true,
+    subgraphTpl: "%id% - %TimeElapsed%",
+    activityTpl: "%Label%",
+    edgeTpl: "%Label%\n%NumRowsProcessed%\n%SkewMinRowsProcessed% / %SkewMaxRowsProcessed%",
+    sql: "SELECT type, name, TimeElapsed, id\n    FROM metrics\n    WHERE TimeElapsed IS NOT NULL",
+    layout: undefined,
+    showTimeline: true
+};
+
+const options: MetricsOptions = { ...defaults };
+
+function checkLayout(options: MetricsOptions): boolean {
+    if (options?.layout && !options?.layout?.["main"]) {
+        delete options.layout;
+    }
+    return !!options?.layout;
 }
 
 export function useMetricsOptions(): [MetricsOptions, (opts: MetricsOptions) => void, () => void, (toDefaults?: boolean) => void] {
@@ -52,7 +64,7 @@ export function useMetricsOptions(): [MetricsOptions, (opts: MetricsOptions) => 
 
     const save = React.useCallback(() => {
         if (checkLayout(options)) {
-            store?.set("MetricOptions", JSON.stringify(options), true);
+            store?.set(METRIC_OPTIONS_KEY, JSON.stringify(options), true);
         }
     }, [store]);
 
@@ -60,7 +72,7 @@ export function useMetricsOptions(): [MetricsOptions, (opts: MetricsOptions) => 
         if (toDefaults) {
             setOptions({ ...defaults });
         } else {
-            store?.get("MetricOptions").then(opts => {
+            store?.get(METRIC_OPTIONS_KEY).then(opts => {
                 const options = JSON.parse(opts);
                 checkLayout(options);
                 setOptions({ ...defaults, ...options });

@@ -714,7 +714,7 @@ std::shared_ptr<arrow::NestedType> ParquetWriter::makeChildRecord(const RtlField
         const RtlFieldInfo childFieldInfo = RtlFieldInfo("", "", child);
         std::vector<std::shared_ptr<arrow::Field>> childField;
         reportIfFailure(fieldToNode(&childFieldInfo, childField));
-        return std::make_shared<arrow::ListType>(childField[0]);
+        return std::make_shared<arrow::LargeListType>(childField[0]);
     }
 }
 
@@ -770,10 +770,17 @@ arrow::Status ParquetWriter::fieldToNode(const RtlFieldInfo *field, std::vector<
     case type_unicode:
     case type_varunicode:
     case type_decimal:
-        arrowFields.push_back(std::make_shared<arrow::Field>(name.str(), arrow::utf8())); //TODO add decimal encoding
+        arrowFields.push_back(std::make_shared<arrow::Field>(name.str(), arrow::utf8())); // TODO: add decimal encoding
         break;
     case type_data:
-        arrowFields.push_back(std::make_shared<arrow::Field>(name.str(), arrow::large_binary()));
+        if (field->type->length > 0)
+        {
+           arrowFields.push_back(std::make_shared<arrow::Field>(name.str(), arrow::fixed_size_binary(field->type->length)));
+        }
+        else
+        {
+           arrowFields.push_back(std::make_shared<arrow::Field>(name.str(), arrow::large_binary()));
+        }
         break;
     case type_record:
         arrowFields.push_back(std::make_shared<arrow::Field>(name.str(), makeChildRecord(field)));
@@ -845,8 +852,8 @@ void ParquetWriter::beginSet(const RtlFieldInfo *field)
     arrow::FieldPath match = getNestedFieldBuilder(field, childBuilder);
     fieldBuilderStack.push_back(std::make_shared<ArrayBuilderTracker>(field, childBuilder, CPNTSet, std::move(match)));
 
-    arrow::ListBuilder *listBuilder = static_cast<arrow::ListBuilder *>(childBuilder);
-    reportIfFailure(listBuilder->Append());
+    arrow::LargeListBuilder *largeListBuilder = static_cast<arrow::LargeListBuilder *>(childBuilder);
+    reportIfFailure(largeListBuilder->Append());
 }
 
 /**
@@ -946,7 +953,7 @@ arrow::ArrayBuilder *ParquetWriter::getFieldBuilder(const RtlFieldInfo *field)
         return recordBatchBuilder->GetField(schema->GetFieldIndex(fieldName.str()));
     }
     else if (fieldBuilderStack.back()->nodeType == CPNTSet)
-        return static_cast<arrow::ListBuilder *>(fieldBuilderStack.back()->structPtr)->value_builder();
+        return static_cast<arrow::LargeListBuilder *>(fieldBuilderStack.back()->structPtr)->value_builder();
     else
         return fieldBuilderStack.back()->structPtr->child(fieldBuilderStack.back()->childrenProcessed++);
 }
@@ -992,20 +999,26 @@ void ParquetWriter::addFieldToBuilder(const RtlFieldInfo *field, unsigned len, c
     arrow::ArrayBuilder *fieldBuilder = getFieldBuilder(field);
     switch(fieldBuilder->type()->id())
     {
-        case arrow::Type::type::STRING:
+        case arrow::Type::STRING:
         {
             arrow::StringBuilder *stringBuilder = static_cast<arrow::StringBuilder *>(fieldBuilder);
             reportIfFailure(stringBuilder->Append(data, len));
             break;
         }
-        case arrow::Type::type::LARGE_BINARY:
+        case arrow::Type::LARGE_BINARY:
         {
             arrow::LargeBinaryBuilder *largeBinaryBuilder = static_cast<arrow::LargeBinaryBuilder *>(fieldBuilder);
             reportIfFailure(largeBinaryBuilder->Append(data, len));
             break;
         }
+        case arrow::Type::FIXED_SIZE_BINARY:
+        {
+            arrow::FixedSizeBinaryBuilder *fixedSizeBinaryBuilder = static_cast<arrow::FixedSizeBinaryBuilder *>(fieldBuilder);
+            reportIfFailure(fixedSizeBinaryBuilder->Append(data));
+            break;
+        }
         default:
-            failx("Incorrect type for String/Large_Binary addFieldToBuilder: %s", fieldBuilder->type()->ToString().c_str());
+            failx("Incorrect type for String/Large_Binary/Fixed_Size_Binary addFieldToBuilder: %s", fieldBuilder->type()->ToString().c_str());
     }
 }
 
@@ -1178,6 +1191,8 @@ std::string_view ParquetRowBuilder::getCurrView(const RtlFieldInfo *field)
             return arrayVisitor->largeStringArr->GetView(currArrayIndex());
         case DecimalType:
             return arrayVisitor->size == 128 ? arrayVisitor->decArr->GetView(currArrayIndex()) : arrayVisitor->largeDecArr->GetView(currArrayIndex());
+        case FixedSizeBinaryType:
+            return arrayVisitor->fixedSizeBinaryArr->GetView(currArrayIndex());
         default:
             failx("Unimplemented Parquet type for field with name %s.", field->name);
     }
@@ -1463,6 +1478,12 @@ void ParquetRowBuilder::processBeginSet(const RtlFieldInfo *field, bool &isAll)
         newPathNode.childCount = arrayVisitor->listArr->value_slice(currentRow)->length();
         pathStack.push_back(newPathNode);
     }
+    else if (arrayVisitor->type == LargeListType)
+    {
+        ParquetColumnTracker newPathNode(field, arrayVisitor->largeListArr, CPNTSet);
+        newPathNode.childCount = arrayVisitor->largeListArr->value_slice(currentRow)->length();
+        pathStack.push_back(newPathNode);
+    }
     else
     {
         failx("Error reading nested set with name %s.", field->name);
@@ -1585,8 +1606,20 @@ void ParquetRowBuilder::nextFromStruct(const RtlFieldInfo *field)
     }
     else if (pathStack.back().nodeType == CPNTSet)
     {
-        auto child = arrayVisitor->listArr->value_slice(currentRow);
-        reportIfFailure(child->Accept(arrayVisitor.get()));
+        if (arrayVisitor->type == ListType)
+        {
+            auto child = arrayVisitor->listArr->value_slice(currentRow);
+            reportIfFailure(child->Accept(arrayVisitor.get()));
+        }
+        else if (arrayVisitor->type == LargeListType)
+        {
+            auto child = arrayVisitor->largeListArr->value_slice(currentRow);
+            reportIfFailure(child->Accept(arrayVisitor.get()));
+        }
+        else
+        {
+            failx("Unexpected type in CPNTSet: neither ListType nor LargeListType");
+        }
     }
 }
 

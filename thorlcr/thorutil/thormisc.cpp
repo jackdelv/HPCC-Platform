@@ -74,26 +74,34 @@ static Owned<IMPtagAllocator> ClusterMPAllocator;
 
 // stat. mappings shared between master and slave activities
 const StatisticsMapping spillStatistics({StTimeSpillElapsed, StTimeSortElapsed, StNumSpills, StSizeSpillFile, StSizePeakTempDisk});
+const StatisticsMapping executeStatistics({StTimeTotalExecute, StTimeLocalExecute, StTimeBlocked});
 const StatisticsMapping soapcallStatistics({StTimeSoapcall});
-const StatisticsMapping basicActivityStatistics({StTimeTotalExecute, StTimeLocalExecute, StTimeBlocked});
+const StatisticsMapping basicActivityStatistics({}, executeStatistics, spillStatistics);
 const StatisticsMapping groupActivityStatistics({StNumGroups, StNumGroupMax}, basicActivityStatistics);
-const StatisticsMapping hashJoinActivityStatistics({StNumLeftRows, StNumRightRows}, basicActivityStatistics);
 const StatisticsMapping indexReadFileStatistics({}, diskReadRemoteStatistics, jhtreeCacheStatistics);
 const StatisticsMapping indexReadActivityStatistics({StNumRowsProcessed}, indexReadFileStatistics, basicActivityStatistics);
 const StatisticsMapping indexWriteActivityStatistics({StPerReplicated, StNumLeafCacheAdds, StNumNodeCacheAdds, StNumBlobCacheAdds }, basicActivityStatistics, diskWriteRemoteStatistics);
 const StatisticsMapping keyedJoinActivityStatistics({ StNumIndexAccepted, StNumPreFiltered, StNumDiskSeeks, StNumDiskAccepted, StNumDiskRejected}, basicActivityStatistics, indexReadFileStatistics);
-const StatisticsMapping loopActivityStatistics({StNumIterations}, basicActivityStatistics);
-const StatisticsMapping lookupJoinActivityStatistics({StNumSmartJoinSlavesDegradedToStd, StNumSmartJoinDegradedToLocal}, basicActivityStatistics);
-const StatisticsMapping joinActivityStatistics({StNumLeftRows, StNumRightRows}, basicActivityStatistics, spillStatistics);
+const StatisticsMapping commonJoinActivityStatistics({StNumMatchLeftRowsMax, StNumMatchRightRowsMax, StNumMatchCandidates, StNumMatchCandidatesMax}, basicActivityStatistics);
+const StatisticsMapping hashJoinActivityStatistics({StNumLeftRows, StNumRightRows}, commonJoinActivityStatistics);
+const StatisticsMapping allJoinActivityStatistics({}, commonJoinActivityStatistics);
+const StatisticsMapping lookupJoinActivityStatistics({StNumSmartJoinSlavesDegradedToStd, StNumSmartJoinDegradedToLocal}, commonJoinActivityStatistics);
+const StatisticsMapping joinActivityStatistics({StNumLeftRows, StNumRightRows}, commonJoinActivityStatistics);
 const StatisticsMapping diskReadActivityStatistics({StNumDiskRowsRead, }, basicActivityStatistics, diskReadRemoteStatistics);
 const StatisticsMapping diskWriteActivityStatistics({StPerReplicated}, basicActivityStatistics, diskWriteRemoteStatistics);
-const StatisticsMapping sortActivityStatistics({}, basicActivityStatistics, spillStatistics);
-const StatisticsMapping graphStatistics({StNumExecutions, StSizeSpillFile, StSizeGraphSpill, StSizePeakTempDisk, StSizePeakEphemeralDisk, StTimeUser, StTimeSystem, StNumContextSwitches, StSizeMemory, StSizePeakMemory, StSizeRowMemory, StSizePeakRowMemory}, basicActivityStatistics);
+const StatisticsMapping sortActivityStatistics({}, basicActivityStatistics);
 const StatisticsMapping diskReadPartStatistics({StNumDiskRowsRead}, diskReadRemoteStatistics);
 const StatisticsMapping indexDistribActivityStatistics({}, basicActivityStatistics, jhtreeCacheStatistics);
 const StatisticsMapping soapcallActivityStatistics({}, basicActivityStatistics, soapcallStatistics);
-const StatisticsMapping hashDedupActivityStatistics({StNumSpills, StSizeSpillFile, StTimeSortElapsed, StSizePeakTempDisk}, diskWriteRemoteStatistics, basicActivityStatistics);
+const StatisticsMapping hashDedupActivityStatistics({}, diskWriteRemoteStatistics, basicActivityStatistics);
 const StatisticsMapping hashDistribActivityStatistics({StNumLocalRows, StNumRemoteRows, StSizeRemoteWrite}, basicActivityStatistics);
+const StatisticsMapping loopActivityStatistics({StNumIterations}, basicActivityStatistics);
+const StatisticsMapping graphStatistics({StNumExecutions, StSizeSpillFile, StSizeGraphSpill, StSizePeakTempDisk, StSizePeakEphemeralDisk, StTimeUser, StTimeSystem, StNumContextSwitches, StSizeMemory, StSizePeakMemory, StSizeRowMemory, StSizePeakRowMemory}, executeStatistics);
+
+const StatKindMap diskToTempStatsMap
+={ {StSizeDiskWrite, StSizeSpillFile},
+   {StTimeDiskWriteIO, StTimeSpillElapsed}
+ };
 
 MODULE_INIT(INIT_PRIORITY_STANDARD)
 {

@@ -148,7 +148,7 @@
       <xsl:element name="SDS">
         <xsl:attribute name="store">dalisds.xml</xsl:attribute>
         <xsl:attribute name="caseInsensitive">0</xsl:attribute>
-        <xsl:copy-of select="@nobackup | @recoverFromIncErrors | @snmpSendWarnings | @enableSNMP | @enableSysLog | @snmpErrorMsgLevel | @msgLevel | @lightweightCoalesce | @keepStores | @deltaSaveThresholdSecs | @deltaTransactionQueueLimit | @deltaTransactionMaxMemMB"/>
+        <xsl:copy-of select="@nobackup | @recoverFromIncErrors | @snmpSendWarnings | @enableSNMP | @enableSysLog | @snmpErrorMsgLevel | @msgLevel | @lightweightCoalesce | @keepStores | @deltaSaveThresholdSecs | @deltaTransactionQueueLimit | @deltaTransactionMaxMemMB | @leakStore"/>
         <xsl:if test="string(@IdlePeriod) != ''">
             <xsl:attribute name="lCIdlePeriod">
                 <xsl:value-of select="@IdlePeriod"/>
@@ -311,6 +311,9 @@
             <xsl:attribute name="useLegacyDefaultFileScopePermissionCache">
                 <xsl:value-of select="/Environment/Software/LDAPServerProcess[@name=$ldapServerName]/@useLegacyDefaultFileScopePermissionCache"/>
             </xsl:attribute>
+            <xsl:attribute name="disableDefaultUser">
+              <xsl:value-of select="/Environment/Software/LDAPServerProcess[@name=$ldapServerName]/@disableDefaultUser"/>
+            </xsl:attribute>
             <xsl:variable name="ldapServerNode" select="/Environment/Software/LDAPServerProcess[@name=$ldapServerName]"/>
             <xsl:if test="not($ldapServerNode)">
               <xsl:message terminate="yes">
@@ -346,8 +349,8 @@
           </xsl:element>
         </xsl:if>
       </xsl:element>
+      <xsl:call-template name="addMetricsConfig"/>
     </DALI>
-    <xsl:call-template name="addMetricsConfig"/>
   </xsl:template>
 
   <xsl:template name="makeAbsolutePath">

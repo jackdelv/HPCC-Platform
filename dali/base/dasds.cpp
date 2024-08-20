@@ -1881,7 +1881,7 @@ public:
             return;
         MemoryAttr ma;
         ma.set(sz, data);
-        CTransactionItem *item = new CTransactionItem(strdup(name), sz, ma.detach(), false);
+        Owned<CTransactionItem> item = new CTransactionItem(strdup(name), sz, ma.detach(), false);
         doAdd(item);
     }
     void add(CTransactionItem *item)
@@ -4938,6 +4938,18 @@ void initializeInternals(IPropertyTree *root)
     root->addPropTree("Status/Servers",createPTree());
 }
 
+void clearStaleMeteData(IPropertyTree *root)
+{
+    // JobQueues
+    // Remove all Client entries from all queues. By definition they are stale (they should normally be removed when the client disconnects)
+    Owned<IPropertyTreeIterator> jobQueues = root->getElements("JobQueues/Queue");
+    ForEach(*jobQueues)
+    {
+        IPropertyTree &queue = jobQueues->query();
+        while (queue.removeProp("Client"));
+    }
+}
+
 IPropertyTree *loadStore(const char *storeFilename, unsigned edition, IPTreeMaker *iMaker, unsigned crcValidation, bool logErrorsOnly=false, const bool *abort=NULL)
 {
     CHECKEDCRITICALBLOCK(loadStoreCrit, fakeCritTimeout);
@@ -5495,13 +5507,15 @@ public:
             return true;
         offset_t fSize = iFileIO->size();
         PROGLOG("Loading delta: %s (size=%.2f MB)", filename, ((double)fSize) / 0x100000);
+        size32_t lenDeltaHeader = strlen(deltaHeader);
         MemoryBuffer tmp;
-        char *ptr = (char *) tmp.reserveTruncate(strlen(deltaHeader));
+        char *ptr = (char *) tmp.reserveTruncate(lenDeltaHeader+1);
         unsigned embeddedCrc = 0;
         offset_t pos = 0;
         bool hasCrcHeader = false; // check really only needed for deltas proceeding CRC header
-        if (strlen(deltaHeader) == iFileIO->read(0, strlen(deltaHeader), ptr))
+        if (lenDeltaHeader == iFileIO->read(0, lenDeltaHeader, ptr))
         {
+            ptr[lenDeltaHeader] = '\0';
             if (0 == memicmp(deltaHeader, ptr, 5))
             {
                 pos = deltaHeaderSizeStart;
@@ -6543,6 +6557,7 @@ void CCovenSDSManager::loadStore(const char *storeName, const bool *abort)
     }
     Owned<IRemoteConnection> conn = connect("/", 0, RTM_INTERNAL, INFINITE);
     initializeInternals(conn->queryRoot());
+    clearStaleMeteData(conn->queryRoot());
     conn.clear();
     initializeStorageGroups(oldEnvironment);
 }

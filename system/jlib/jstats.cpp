@@ -197,7 +197,7 @@ const static unsigned __int64 oneMinute = I64C(60000000000);
 const static unsigned __int64 oneHour = I64C(3600000000000);
 const static unsigned __int64 oneDay = 24 * I64C(3600000000000);
 
-static void formatTime(StringBuffer & out, unsigned __int64 value)
+void formatTime(StringBuffer & out, unsigned __int64 value)
 {
     //Aim to display at least 3 significant digits in the result string
     if (value < oneMicroSecond)
@@ -979,6 +979,10 @@ static const constexpr StatisticMeta statsMetaData[StMax] = {
     { SIZESTAT(RemoteWrite), "Size of data sent to remote workers"},
     { PEAKSIZESTAT(PeakTempDisk), "High water mark for temporary files"},
     { PEAKSIZESTAT(PeakEphemeralDisk), "High water mark for emphemeral storage use"},
+    { NUMSTAT(MatchLeftRowsMax), "The largest number of left rows in a join group" },
+    { NUMSTAT(MatchRightRowsMax), "The largest number of right rows in a join group" },
+    { NUMSTAT(MatchCandidates), "The number of candidate combinations of left and right rows forming join groups" },
+    { NUMSTAT(MatchCandidatesMax), "The largest number of candidate combinations of left and right rows in a single group" },
 };
 
 static MapStringTo<StatisticKind, StatisticKind> statisticNameMap(true);
@@ -1297,6 +1301,13 @@ class CComponentStatistics
 
 //--------------------------------------------------------------------------------------------------------------------
 
+//This object is accessed by all StatisticsMapping constructors.  It is important that it is initialised before any of
+//them are called.  Coverity routinely complains about possible GLOBAL_INIT_ORDER problems.  These are false positives
+//as long as
+//   * this definition of allStatsMappings comes first in this file before any StatisticsMappings
+//   * there must be no other files in jlib that declare a StatisticMapping.
+// StatisticsMappings in other dlls are ok because it is guaranteed that the dependent dll/so is initialised first
+
 static std::unordered_map<unsigned, const StatisticsMapping *> allStatsMappings;
 
 static int compareUnsigned(unsigned const * left, unsigned const * right)
@@ -1317,6 +1328,8 @@ void StatisticsMapping::createMappings()
     ForEachItemIn(i2, indexToKind)
     {
         unsigned kind = indexToKind.item(i2);
+        unsigned existing = kindToIndex.item(kind);
+        assertex(existing == numStatistics());  // Throw an error if there are duplicate statistics in the mapping
         kindToIndex.replace(i2, kind);
     }
 
@@ -3105,6 +3118,9 @@ static bool isWorthReportingMergedValue(StatisticKind kind)
     {
     case StSizePeakMemory:
     case StSizePeakRowMemory:
+    case StNumMatchLeftRowsMax:
+    case StNumMatchRightRowsMax:
+    case StNumMatchCandidatesMax:
         //These only make sense for individual nodes, the aggregated value is meaningless
         return false;
     }

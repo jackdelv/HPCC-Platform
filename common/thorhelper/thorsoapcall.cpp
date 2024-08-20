@@ -468,7 +468,7 @@ public:
             {
                 if (e->errorCode() == ROXIE_ABORT_EVENT)
                     throw;
-                // MCK - do we checkTimeLimitExceeded(&remainingMS) and possibly error out if timelimit exceeded ?
+                // TODO: do we checkTimeLimitExceeded(&remainingMS) and possibly error out if timelimit exceeded ?
                 if (numAttemptsRemaining > 0)
                 {
                     e->Release();
@@ -2468,7 +2468,10 @@ public:
                 {
                     checkTimeLimitExceeded(&remainingMS);
                     Url &connUrl = master->proxyUrlArray.empty() ? url : master->proxyUrlArray.item(0);
-                    ep.set(connUrl.host.get(), connUrl.port);
+
+                    // TODO: for DNS, do we use timeoutMS or remainingMS or remainingMS / maxRetries+1 or ?
+                    ep.set(connUrl.host.get(), connUrl.port, master->timeoutMS);
+
                     if (ep.isNull())
                         throw MakeStringException(-1, "Failed to resolve host '%s'", nullText(connUrl.host.get()));
 
@@ -2488,7 +2491,10 @@ public:
                     {
                         isReused = false;
                         keepAlive = true;
+
+                        // TODO: for each connect attempt, do we use timeoutMS or remainingMS or remainingMS / maxRetries or ?
                         socket.setown(blacklist->connect(ep, master->logctx, (unsigned)master->maxRetries, master->timeoutMS, master->roxieAbortMonitor, master->rowProvider));
+
                         if (proto == PersistentProtocol::ProtoTLS)
                         {
 #ifdef _USE_OPENSSL
@@ -2514,7 +2520,6 @@ public:
                             err.append(": OpenSSL disabled in build");
                             throw makeStringException(0, err.str());
 #endif
-
                         }
                     }
                     break;
@@ -2559,10 +2564,16 @@ public:
             {
                 checkTimeLimitExceeded(&remainingMS);
                 checkRoxieAbortMonitor(master->roxieAbortMonitor);
-                OwnedSpanScope socketOperationSpan = master->activitySpanScope->createClientSpan("Socket Write");
-                setSpanURLAttributes(socketOperationSpan, url);
 
-                Owned<IProperties> traceHeaders = ::getClientHeaders(socketOperationSpan);
+                StringBuffer spanName;
+                spanName.appendf("%s %s %s:%d", getWsCallTypeName(master->wscType), master->service.str(), url.host.str(), url.port);
+                OwnedSpanScope requestSpan = master->activitySpanScope->createClientSpan(spanName.str());
+
+                setSpanURLAttributes(requestSpan, url);
+                requestSpan->setSpanAttribute("request.type", getWsCallTypeName(master->wscType));
+                requestSpan->setSpanAttribute("service.name", master->service.str());
+
+                Owned<IProperties> traceHeaders = ::getClientHeaders(requestSpan);
                 createHttpRequest(request, url, traceHeaders);
 
                 socket->write(request.str(), request.length());
@@ -2575,7 +2586,7 @@ public:
                 bool keepAlive2;
                 StringBuffer contentType;
                 int rval = readHttpResponse(response, socket, keepAlive2, contentType);
-                socketOperationSpan->setSpanAttribute("http.response.status_code", (int64_t)rval);
+                requestSpan->setSpanAttribute("http.response.status_code", (int64_t)rval);
                 keepAlive = keepAlive && keepAlive2;
 
                 if (soapTraceLevel > 4)
@@ -2583,22 +2594,22 @@ public:
 
                 if (rval != 200)
                 {
-                    socketOperationSpan->setSpanStatusSuccess(false);
+                    requestSpan->setSpanStatusSuccess(false);
                     if (rval == 503)
                     {
-                        socketOperationSpan->recordError(SpanError("Server Too Busy", 1001, true, true));
+                        requestSpan->recordError(SpanError("Server Too Busy", 1001, true, true));
                         throw new ReceivedRoxieException(1001, "Server Too Busy");
                     }
 
                     StringBuffer text;
                     text.appendf("HTTP error (%d) in processQuery",rval);
                     rtlAddExceptionTag(text, "soapresponse", response.str());
-                    socketOperationSpan->recordError(SpanError(text.str(), -1, true, true));
+                    requestSpan->recordError(SpanError(text.str(), -1, true, true));
                     throw MakeStringExceptionDirect(-1, text.str());
                 }
                 if (response.length() == 0)
                 {
-                    socketOperationSpan->recordError(SpanError("Zero length response in processQuery", -1, true, true));
+                    requestSpan->recordError(SpanError("Zero length response in processQuery", -1, true, true));
                     throw MakeStringException(-1, "Zero length response in processQuery");
                 }
                 checkTimeLimitExceeded(&remainingMS);
@@ -2614,7 +2625,7 @@ public:
                         persistentHandler->add(socket, &ep, proto);
                 }
 
-                socketOperationSpan->setSpanStatusSuccess(true);
+                requestSpan->setSpanStatusSuccess(true);
                 break;
             }
             catch (IReceivedRoxieException *e)
@@ -2642,12 +2653,11 @@ public:
                 {
                     // other roxie exception ...
                     master->logctx.CTXLOG("Exiting: received Roxie exception");
+                    master->activitySpanScope->recordException(e, true, true);
                     if (e->errorRow())
                         processException(url, e->errorRow(), e);
                     else
                         processException(url, inputRows, e);
-
-                    master->activitySpanScope->recordException(e, true, true);
                     break;
                 }
             }
@@ -2657,10 +2667,10 @@ public:
                     persistentHandler->doneUsing(socket, false);
                 if (master->timeLimitExceeded)
                 {
-                    processException(url, inputRows, e);
                     VStringBuffer msg("%s exiting: time limit (%ums) exceeded", getWsCallTypeName(master->wscType), master->timeLimitMS);
                     master->logctx.CTXLOG("%s", msg.str());
                     master->activitySpanScope->recordError(SpanError(msg.str(), e->errorCode(), true, true));
+                    processException(url, inputRows, e);
                     break;
                 }
 

@@ -5,6 +5,7 @@ import { SizeMe } from "react-sizeme";
 import { CreateWUQueryStore, defaultSort, emptyFilter, Get, WUQueryStore, formatQuery } from "src/ESPWorkunit";
 import * as WsWorkunits from "src/WsWorkunits";
 import { formatCost } from "src/Session";
+import { userKeyValStore } from "src/KeyValStore";
 import nlsHPCC from "src/nlsHPCC";
 import { useConfirm } from "../hooks/confirm";
 import { useMyAccount } from "../hooks/user";
@@ -45,6 +46,13 @@ const defaultUIState = {
     hasNotCompleted: false
 };
 
+const WORKUNITS_SHOWTIMELINE = "workunits_showTimeline";
+
+export function resetWorkunitOptions() {
+    const store = userKeyValStore();
+    return store?.delete(WORKUNITS_SHOWTIMELINE);
+}
+
 interface WorkunitsProps {
     filter?: { [id: string]: any };
     sort?: QuerySortItem;
@@ -64,7 +72,7 @@ export const Workunits: React.FunctionComponent<WorkunitsProps> = ({
     const [showFilter, setShowFilter] = React.useState(false);
     const { currentUser } = useMyAccount();
     const [uiState, setUIState] = React.useState({ ...defaultUIState });
-    const [showTimeline, setShowTimeline] = useUserStore<boolean>("workunits_showTimeline", true);
+    const [showTimeline, setShowTimeline] = useUserStore<boolean>(WORKUNITS_SHOWTIMELINE, true);
     const {
         selection, setSelection,
         pageNum, setPageNum,
@@ -213,7 +221,7 @@ export const Workunits: React.FunctionComponent<WorkunitsProps> = ({
         { key: "divider_2", itemType: ContextualMenuItemType.Divider, onRender: () => <ShortVerticalDivider /> },
         {
             key: "setFailed", text: nlsHPCC.SetToFailed, disabled: !uiState.hasNotProtected,
-            onClick: () => { WsWorkunits.WUAction(selection, "SetToFailed"); }
+            onClick: () => { WsWorkunits.WUAction(selection, "SetToFailed").then(() => refreshTable.call()); }
         },
         {
             key: "abort", text: nlsHPCC.Abort, disabled: !uiState.hasNotCompleted,

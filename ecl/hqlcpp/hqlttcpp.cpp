@@ -6493,7 +6493,9 @@ IHqlExpression * WorkflowTransformer::extractCommonWorkflow(IHqlExpression * exp
         if (expr->queryName())
             s.append("[").append(expr->queryName()).append("] ");
         s.append(" to common up code between workflow items");
-        DBGLOG("%s", s.str());
+        if (doTrace(traceOptimizations))
+            DBGLOG("%s", s.str());
+
         translator.addWorkunitException(SeverityInformation, HQLWRN_TryAddingIndependent, s.str(), location);
         if (!translator.queryOptions().performWorkflowCse)
             return LINK(transformed);
@@ -6503,11 +6505,12 @@ IHqlExpression * WorkflowTransformer::extractCommonWorkflow(IHqlExpression * exp
     // e.g., ensure it really is worth commoning up, the expressions aren't to be evaluated on different clusters etc. etc.
     unsigned wfid = ++wfidCount;
 
-    s.appendf("AutoWorkflow: Spotted %s ", getOpString(expr->getOperator()));
+    s.clear().appendf("AutoWorkflow: Spotted %s ", getOpString(expr->getOperator()));
     if (expr->queryId())
         s.append("[").append(expr->queryId()->queryStr()).append("] ");
     s.append(" to common up between workflow items [").append(wfid).append("]");
-    DBGLOG("%s", s.str());
+    if (doTrace(traceOptimizations))
+        DBGLOG("%s", s.str());
     translator.addWorkunitException(SeverityInformation, 0, s.str(), location);
 
     GlobalAttributeInfo info("jobtemp::wfa", "wfa", transformed);
@@ -8315,7 +8318,7 @@ IHqlDataset * queryRootDataset(IHqlExpression * dataset)
 //therefore, there is no need to special case if actions.  Thor on the other hand will cause it to be executed unnecessarily.
 static HqlTransformerInfo newScopeMigrateTransformerInfo("NewScopeMigrateTransformer");
 NewScopeMigrateTransformer::NewScopeMigrateTransformer(IWorkUnit * _wu, HqlCppTranslator & _translator)
-: HoistingHqlTransformer(newScopeMigrateTransformerInfo, 0), translator(_translator)
+: HoistingHqlTransformer(newScopeMigrateTransformerInfo, CTFnone), translator(_translator)
 {
     wu = _wu;
     isRoxie = translator.targetRoxie();
@@ -8622,7 +8625,7 @@ bool AutoScopeMigrateInfo::doAutoHoist(IHqlExpression * transformed, bool minimi
 
 static HqlTransformerInfo autoScopeMigrateTransformerInfo("AutoScopeMigrateTransformer");
 AutoScopeMigrateTransformer::AutoScopeMigrateTransformer(IWorkUnit * _wu, HqlCppTranslator & _translator)
-: NewHqlTransformer(autoScopeMigrateTransformerInfo), translator(_translator)
+: HoistingHqlTransformer(autoScopeMigrateTransformerInfo, CTFnone), translator(_translator)
 {
     wu = _wu;
     isRoxie = (translator.getTargetClusterType() == RoxieCluster);
@@ -8631,7 +8634,6 @@ AutoScopeMigrateTransformer::AutoScopeMigrateTransformer(IWorkUnit * _wu, HqlCpp
     hasCandidate = false;
     activityDepth = 0;
     curGraph = 1;
-    globalTarget = NULL;
 }
 
 //Ensure all input activities are marked as never hoisting, but child activities are unaffected
@@ -8833,12 +8835,15 @@ IHqlExpression * AutoScopeMigrateTransformer::createTransformed(IHqlExpression *
     AutoScopeMigrateInfo * extra = queryBodyExtra(expr);
     if (extra->doAutoHoist(transformed, translator.queryOptions().minimizeWorkunitTemporaries))
     {
-        StringBuffer s;
-        s.appendf("AutoGlobal: Spotted %s ", getOpString(expr->getOperator()));
-        if (expr->queryName())
-            s.append("[").append(expr->queryName()).append("] ");
-        s.append("as an item to hoist");
-        DBGLOG("%s", s.str());
+        if (doTrace(traceOptimizations))
+        {
+            StringBuffer s;
+            s.appendf("AutoGlobal: Spotted %s ", getOpString(expr->getOperator()));
+            if (expr->queryName())
+                s.append("[").append(expr->queryName()).append("] ");
+            s.append("as an item to hoist");
+            DBGLOG("%s", s.str());
+        }
         if (extra->globalInsideChild)
         {
             StringBuffer nameText;
@@ -8861,7 +8866,7 @@ IHqlExpression * AutoScopeMigrateTransformer::createTransformed(IHqlExpression *
         //else hoist it within the current graph, otherwise it can get hoisted before globals on datasets that
         //it is dependent on.
         if (extra->firstUseIsConditional)
-            globalTarget->append(*createWrapper(no_thor, setResult.getClear()));
+            appendToTarget(*createWrapper(no_thor, setResult.getClear()));
         else
             graphActions.append(*setResult.getClear());
         transformed.setown(getResult.getClear());
@@ -8871,11 +8876,20 @@ IHqlExpression * AutoScopeMigrateTransformer::createTransformed(IHqlExpression *
 }
 
 
-void AutoScopeMigrateTransformer::transformRoot(const HqlExprArray & in, HqlExprArray & out)
+IHqlExpression * AutoScopeMigrateTransformer::doTransformIndependent(IHqlExpression * expr)
 {
-    globalTarget = &out;
-    NewHqlTransformer::transformRoot(in, out);
-    globalTarget = NULL;
+    AutoScopeMigrateTransformer transformer(wu, translator);
+
+    HqlExprArray exprs;
+    unwindCommaCompound(exprs, expr);
+    transformer.analyseArray(exprs, 0);
+    transformer.analyseArray(exprs, 1);
+    if (!transformer.worthTransforming())
+        return LINK(expr);
+
+    HqlExprArray results;
+    transformer.transformRoot(exprs, results);
+    return createActionList(results);
 }
 
 
@@ -9386,7 +9400,8 @@ IHqlExpression * KeyedProjectTransformer::createTransformed(IHqlExpression * exp
                 expandedTransform.setown(mapper.expandFields(transformed->queryChild(3), oldRight, newRight));
             if (translatedFilter && (expandedTransform || op == no_keyeddistribute))
             {
-                DBGLOG("KeyedProjectTransformer: Merge KEYED PROJECT into JOIN");
+                if (doTrace(traceOptimizations))
+                    DBGLOG("KeyedProjectTransformer: Merge KEYED PROJECT into JOIN");
                 HqlExprArray args;
                 args.append(*LINK(transformed->queryChild(0)));
                 args.append(*LINK(rhs->queryChild(0)));

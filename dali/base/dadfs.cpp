@@ -232,8 +232,8 @@ extern da_decl cost_type calcDiskWriteCost(const StringArray & clusters, stat_ty
     return writeCost;
 }
 
-
-// Deprecated and should be removed and new feature tested
+// JCSMORE - I suspect this function should be removed/deprecated. It does not deal with dirPerPart or striping.
+// makePhysicalPartName supports both, but does not deal with groups/endpoints)
 RemoteFilename &constructPartFilename(IGroup *grp,unsigned partno,unsigned partmax,const char *name,const char *partmask,const char *partdir,unsigned copy,ClusterPartDiskMapSpec &mspec,RemoteFilename &rfn)
 {
     partno--;

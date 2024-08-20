@@ -10,12 +10,12 @@ import nlsHPCC from "src/nlsHPCC";
 import * as Utility from "src/Utility";
 
 import { useBanner } from "../hooks/banner";
-import { useECLWatchLogger } from "../hooks/logging";
-import { useBuildInfo, useModernMode } from "../hooks/platform";
-import { useGlobalStore } from "../hooks/store";
-import { useMyAccount, useUserSession } from "../hooks/user";
+import { useConfirm } from "../hooks/confirm";
 import { replaceUrl } from "../util/history";
-import { useCheckFeatures } from "../hooks/platform";
+import { useECLWatchLogger } from "../hooks/logging";
+import { useBuildInfo, useModernMode, useCheckFeatures } from "../hooks/platform";
+import { useGlobalStore } from "../hooks/store";
+import { PasswordStatus, useMyAccount, useUserSession } from "../hooks/user";
 
 import { TitlebarConfig } from "./forms/TitlebarConfig";
 import { switchTechPreview } from "./controls/ComingSoon";
@@ -64,6 +64,15 @@ export const DevTitle: React.FunctionComponent<DevTitleProps> = ({
 
     const [showBannerConfig, setShowBannerConfig] = React.useState(false);
     const [BannerMessageBar, BannerConfig] = useBanner({ showForm: showBannerConfig, setShowForm: setShowBannerConfig });
+
+    const [PasswordExpiredConfirm, setPasswordExpiredConfirm] = useConfirm({
+        title: nlsHPCC.PasswordExpiration,
+        message: nlsHPCC.PasswordExpired,
+        cancelLabel: null,
+        onSubmit: React.useCallback(() => {
+            setShowMyAccount(true);
+        }, [])
+    });
 
     const titlebarColorSet = React.useMemo(() => {
         return titlebarColor && titlebarColor !== theme.palette.themeLight;
@@ -173,6 +182,12 @@ export const DevTitle: React.FunctionComponent<DevTitleProps> = ({
                     isChecked: true,
                     onClick: onTechPreviewClick
                 },
+                { key: "divider_4", itemType: ContextualMenuItemType.Divider },
+                {
+                    key: "reset",
+                    href: "/esp/files/index.html#/reset",
+                    text: nlsHPCC.ResetUserSettings
+                },
                 { key: "about", text: nlsHPCC.About, onClick: () => setShowAbout(true) }
             ],
             directionalHintFixed: true
@@ -236,16 +251,23 @@ export const DevTitle: React.FunctionComponent<DevTitleProps> = ({
         if (!cookie("PasswordExpiredCheck")) {
             // cookie expires option expects whole number of days, use a decimal < 1 for hours
             cookie("PasswordExpiredCheck", "true", { expires: 0.5, path: "/" });
-            if (currentUser.passwordIsExpired) {
-                alert(nlsHPCC.PasswordExpired);
-                setShowMyAccount(true);
-            } else if (currentUser.passwordDaysRemaining && currentUser.passwordDaysRemaining <= currentUser.passwordExpirationWarningDays) {
-                if (confirm(nlsHPCC.PasswordExpirePrefix + currentUser.passwordDaysRemaining + nlsHPCC.PasswordExpirePostfix)) {
-                    setShowMyAccount(true);
-                }
+            switch (currentUser.passwordDaysRemaining) {
+                case PasswordStatus.Expired:
+                    setPasswordExpiredConfirm(true);
+                    break;
+                case PasswordStatus.NeverExpires:
+                case null:
+                    break;
+                default:
+                    if (currentUser?.passwordDaysRemaining <= currentUser?.passwordExpirationWarningDays) {
+                        if (confirm(nlsHPCC.PasswordExpirePrefix + currentUser.passwordDaysRemaining + nlsHPCC.PasswordExpirePostfix)) {
+                            setShowMyAccount(true);
+                        }
+                    }
+                    break;
             }
         }
-    }, [currentUser]);
+    }, [currentUser, setPasswordExpiredConfirm]);
 
     return <div style={{ backgroundColor: titlebarColorSet ? titlebarColor : theme.palette.themeLight }}>
         <BannerMessageBar />
@@ -296,6 +318,7 @@ export const DevTitle: React.FunctionComponent<DevTitleProps> = ({
         <MyAccount currentUser={currentUser} show={showMyAccount} onClose={() => setShowMyAccount(false)}></MyAccount>
         <TitlebarConfig toolbarThemeDefaults={toolbarThemeDefaults} showForm={showTitlebarConfig} setShowForm={setShowTitlebarConfig} />
         <BannerConfig />
+        <PasswordExpiredConfirm />
     </div>;
 };
 

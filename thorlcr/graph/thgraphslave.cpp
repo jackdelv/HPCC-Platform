@@ -1255,6 +1255,8 @@ void CSlaveGraph::executeSubGraph(size32_t parentExtractSz, const byte *parentEx
 
 void CSlaveGraph::abort(IException *e)
 {
+    if (aborted)
+        return;
     if (!graphDone) // set pre done(), no need to abort if got that far.
         CGraphBase::abort(e);
     getDoneSem.signal();
@@ -1262,23 +1264,27 @@ void CSlaveGraph::abort(IException *e)
 
 void CSlaveGraph::done()
 {
-    GraphPrintLog("End of sub-graph");
-    progressActive.store(false);
-    setProgressUpdated(); // NB: ensure collected after end of graph
-    if (!queryOwner() || isGlobal())
+    if (started)
     {
-        if (aborted || !graphDone)
+        GraphPrintLog("End of sub-graph");
+        progressActive.store(false);
+        setProgressUpdated(); // NB: ensure collected after end of graph
+
+        if (initialized && (!queryOwner() || isGlobal()))
         {
-            if (!getDoneSem.wait(SHORTTIMEOUT)) // wait on master to clear up, gather info from slaves
-                WARNLOG("CSlaveGraph::done - timedout waiting for master to signal done()");
+            if (aborted || !graphDone)
+            {
+                if (!getDoneSem.wait(SHORTTIMEOUT)) // wait on master to clear up, gather info from slaves
+                    WARNLOG("CSlaveGraph::done - timedout waiting for master to signal done()");
+            }
+            else
+                getDoneSem.wait();
         }
-        else
-            getDoneSem.wait();
-    }
-    if (!queryOwner())
-    {
-        if (globals->getPropBool("@watchdogProgressEnabled"))
-            jobS->queryProgressHandler()->stopGraph(*this, NULL);
+        if (!queryOwner())
+        {
+            if (globals->getPropBool("@watchdogProgressEnabled"))
+                jobS->queryProgressHandler()->stopGraph(*this, NULL);
+        }
     }
 
     Owned<IException> exception;
@@ -1317,20 +1323,7 @@ bool CSlaveGraph::serializeStats(MemoryBuffer &mb)
     if (tempHandler)
         stats.mergeStatistic(StSizeGraphSpill, sizeGraphSpill);
 
-    // calculate peak spill size
-    if (started&&initialized)
-    {
-        offset_t activeTempSize = 0;
-        Owned<IThorActivityIterator> iter = getConnectedIterator();
-        ForEach (*iter)
-        {
-            CGraphElementBase &element = iter->query();
-            CSlaveActivity &activity = (CSlaveActivity &)*element.queryActivity();
-            activeTempSize += activity.queryActiveTempSize();
-        }
-        if (activeTempSize > peakTempSize)
-            peakTempSize = activeTempSize;
-    }
+    offset_t peakTempSize = queryPeakTempSize();
     if (peakTempSize)
         stats.mergeStatistic(StSizePeakTempDisk, peakTempSize);
     if (peakTempSize + sizeGraphSpill)

@@ -77,6 +77,7 @@ spec:
       run: {{ $dali.name | quote }}
       server: {{ $dali.name | quote }}
       app: dali
+  serviceName: {{ $dali.name | quote }}
   updateStrategy:
     type: RollingUpdate
     rollingUpdate:
@@ -88,7 +89,7 @@ spec:
         run: {{ $dali.name | quote }}
         server: {{ $dali.name | quote }}
         app: dali
-        helmVersion: 9.6.23-closedown0
+        {{- include "hpcc.generateHelmVersion" . | nindent 8 }}
 {{- if hasKey $.Values.global "metrics" }}
  {{- include "hpcc.generateMetricsReporterLabel" $.Values.global.metrics | nindent 8 }}
 {{- end }}

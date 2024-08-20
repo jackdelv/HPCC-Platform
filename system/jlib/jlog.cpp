@@ -275,6 +275,11 @@ void LogMsgJobInfo::deserialize(MemoryBuffer & in)
 {
 // kludge for backward compatibility of pre 8.0 clients that send a LogMsgJobId: (_uint64), not a string
 // NB: jobID pre 8.0 was redundant as always equal to UnknownJob
+    if (isDeserialized)
+    {
+        free((void *) jobIDStr);
+        jobIDStr = nullptr;
+    }
     dbgassertex(in.remaining() >= sizeof(LogMsgJobId)); // should always be at least this amount, because userID follows the jobID
     if (0 == memcmp(in.toByteArray()+in.getPos(), &UnknownJob, sizeof(LogMsgJobId))) // pre 8.0 client
     {
@@ -3213,32 +3218,21 @@ IRemoteLogAccess *queryRemoteLogAccessor()
                 {
                     const char * simulatedGlobalYaml = R"!!(global:
   logAccess:
-    name: "Azure LogAnalytics LogAccess"
-    type: "AzureLogAnalyticsCurl"
+    name: "Grafana/loki stack log access"
+    type: "GrafanaCurl"
     connection:
       #workspaceID: "ef060646-ef24-48a5-b88c-b1f3fbe40271"
-      workspaceID: "XYZ"      #ID of the Azure LogAnalytics workspace to query logs from
+      #workspaceID: "XYZ"      #ID of the Azure LogAnalytics workspace to query logs from
       #tenantID: "ABC"         #The Tenant ID, required for KQL API access
-      clientID: "DEF"         #ID of Azure Active Directory registered application with api.loganalytics.io access
-    logMaps:
-    - type: "global"
-      storeName: "ContainerLog"
-      searchColumn: "LogEntry"
-      timeStampColumn: "hpcc_log_timestamp"
-    - type: "workunits"
-      storeName: "ContainerLog"
-      searchColumn: "hpcc_log_jobid"
-    - type: "components"
-      searchColumn: "ContainerID"
-    - type: "audience"
-      searchColumn: "hpcc_log_audience"
-    - type: "class"
-      searchColumn: "hpcc_log_class"
-    - type: "instance"
-      storeName: "ContainerInventory"
-      searchColumn: "Name"
-    - type: "host"
-      searchColumn: "Computer"
+      #clientID: "DEF"         #ID of Azure Active Directory registered application with api.loganalytics.io access
+      protocol: "http"
+      host: "localhost"
+      port: "3000"
+    datasource:
+      id: "1"
+      name: "Loki"
+    namespace:
+      name: "hpcc"
                     )!!";
                     Owned<IPropertyTree> testTree = createPTreeFromYAMLString(simulatedGlobalYaml, ipt_none, ptr_ignoreWhiteSpace, nullptr);
                     logAccessPluginConfig.setown(testTree->getPropTree("global/logAccess"));

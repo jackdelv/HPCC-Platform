@@ -15,6 +15,7 @@
     limitations under the License.
 ############################################################################## */
 
+#include <cmath>
 #include "thactivityutil.ipp"
 #include "thcompressutil.hpp"
 #include "thexception.hpp"
@@ -155,6 +156,8 @@ class CBroadcaster : public CSimpleInterface
         CThreadedPersistent threaded;
         SimpleInterThreadQueueOf<CSendItem, true> broadcastQueue;
         Owned<IException> exception;
+        unsigned myNode;
+        unsigned nodes;
         bool aborted;
         void clearQueue()
         {
@@ -169,6 +172,14 @@ class CBroadcaster : public CSimpleInterface
         CSend(CBroadcaster &_broadcaster) : threaded("CBroadcaster::CSend", this), broadcaster(_broadcaster)
         {
             aborted = false;
+            myNode = broadcaster.activity.queryJob().queryMyNodeRank()-1; // 0 based
+            nodes = broadcaster.activity.queryJob().queryNodes();
+
+            // in theory each worker could be sending log(n) packets, with the broadcaster on each blocking waiting for acks
+            unsigned limit = nodes * std::ceil(std::log2(nodes));
+            limit = broadcaster.activity.getOptInt("lookupJoinBroadcastQLimit", limit);
+            if (0 != limit)
+                broadcastQueue.setLimit(limit);
         }
         ~CSend()
         {
@@ -182,7 +193,27 @@ class CBroadcaster : public CSimpleInterface
                     sendItem->Release();
                 throw exception.getClear();
             }
-            broadcastQueue.enqueue(sendItem); // will block if queue full
+            // check if anywhere else to send to
+            if (sendItem)
+            {
+                unsigned origin = sendItem->queryNode();
+                unsigned pseudoNode = (myNode<origin) ? nodes-origin+myNode : myNode-origin;
+                unsigned t = broadcaster.target(0, pseudoNode);
+                if (t>=nodes)
+                {
+                    sendItem->Release();
+                    return;
+                }
+            }
+            while (!broadcastQueue.enqueue(sendItem, 20000)) // will timeout if queue full
+            {
+                if (broadcastQueue.queryStopped())
+                {
+                    DBGLOG("broadcastQueue stopped");
+                    break;
+                }
+                DBGLOG("CSend::addBlock() - broadcastQueue full, waiting for space");
+            }
         }
         void start()
         {
@@ -272,6 +303,8 @@ class CBroadcaster : public CSimpleInterface
         mptag_t rt = ::createReplyTag();
         unsigned origin = sendItem->queryNode();
         unsigned pseudoNode = (myNode<origin) ? nodes-origin+myNode : myNode-origin;
+
+        // NB: could in theory spot if all descendents that this would end up propagating to have stopped, and not send
         CMessageBuffer replyMsg;
         // sends to all in 1st pass, then waits for ack from all
         for (unsigned sendRecv=0; sendRecv<2 && !activity.queryAbortSoon(); sendRecv++)
@@ -306,6 +339,10 @@ class CBroadcaster : public CSimpleInterface
 #endif
                     if (!activity.receiveMsg(comm, replyMsg, t, rt))
                         break;
+                    bool isStopping;
+                    replyMsg.read(isStopping);
+                    if (isStopping) // effectively a shortcut to mark asap that sender is stopping because the receiver has been requested to stop
+                        setStopping(t-1);
 #ifdef _TRACEBROADCAST
                     ActPrintLog(&activity, "Broadcast node %d Sent to node %d, origin node %d, origin slave %d, size %d, code=%d - received ack", myNode+1, t, origin+1, sendItem->querySlave()+1, sendLen, (unsigned)sendItem->queryCode());
 #endif
@@ -330,6 +367,11 @@ class CBroadcaster : public CSimpleInterface
         }
         return false;
     }
+    // recieve loop, receives CSendItem packets, adds them to broadcaster thread ('sender'), and processes the packet via 'bCastReceive'.
+    // bcast_sendStopping are regular row packets that inform us that the sender is stopping (something upstream has asked it to stop())
+    // - If all workers have signalled stopping, 'allRequestStop' will be set and will curtail the broadcast of more packets.
+    // - Or, if the broadcaster has explicitly been stopped (occurs via failover to local lookup), this will also curtail the broadcast of more packets.
+    // bcast_stop contains no row data, it signals that the sender has finished sending data.
     void recvLoop()
     {
         // my sender is implicitly stopped (never sends to self)
@@ -349,16 +391,20 @@ class CBroadcaster : public CSimpleInterface
                 break;
             }
             mptag_t replyTag = msg.getReplyTag();
-            CMessageBuffer ackMsg;
             Owned<CSendItem> sendItem = new CSendItem(msg);
 #ifdef _TRACEBROADCAST
             ActPrintLog(&activity, "Broadcast node %d received from node %d, origin node %d, origin slave %d, size %d, code=%d", myNode+1, (unsigned)sendRank, sendItem->queryNode()+1, sendItem->querySlave()+1, sendItem->length(), (unsigned)sendItem->queryCode());
 #endif
+            CMessageBuffer ackMsg;
+            bool stopping = isStopping(); // this is effectively a shortcut to inform sender asap. bcast_sendStopping/bcast_stop will be queued soon
+            ackMsg.append(stopping);
             comm.send(ackMsg, sendRank, replyTag); // send ack
 #ifdef _TRACEBROADCAST
             ActPrintLog(&activity, "Broadcast node %d, sent ack to node %d, replyTag=%d", myNode+1, (unsigned)sendRank, (unsigned)replyTag);
 #endif
-            sender.addBlock(sendItem.getLink());
+            // if all stopping, then suppress broadcasting (except stop packets)
+            if (!allRequestStop || (bcast_stop == sendItem->queryCode()))
+                sender.addBlock(sendItem.getLink());
             assertex(myNode != sendItem->queryNode());
             switch (sendItem->queryCode())
             {
@@ -806,6 +852,7 @@ class CInMemJoinBase : public CSlaveActivity, public CAllOrLookupHelper<HELPER>,
 {
     typedef CSlaveActivity PARENT;
 
+    JoinMatchStats matchStats;
     Owned<IException> leftexception;
 
     bool eos, eog, someSinceEog;
@@ -949,6 +996,7 @@ protected:
     unsigned keepLimit;
     unsigned joined;
     unsigned joinCounter;
+    unsigned candidateCounter;
     OwnedConstThorRow defaultLeft;
 
     bool leftMatch, grouped;
@@ -1165,10 +1213,12 @@ protected:
     inline const void *denormalizeNextRow()
     {
         ConstPointerArray filteredRhs;
+        unsigned candidates = 0;
         while (rhsNext)
         {
             if (abortSoon)
                 return NULL;
+            candidates++;
             if (!fuzzyMatch || (HELPERBASE::match(leftRow, rhsNext)))
             {
                 leftMatch = true;
@@ -1187,6 +1237,7 @@ protected:
             }
             rhsNext = tableProxy->getNextRHS(currentHashEntry); // NB: currentHashEntry only used for Lookup,Many case
         }
+        matchStats.noteGroup(1, candidates);
         if (filteredRhs.ordinality() || (!leftMatch && 0!=(flags & JFleftouter)))
         {
             unsigned rcCount = 0;
@@ -1238,6 +1289,7 @@ protected:
                 {
                     leftRow.setown(left->nextRow());
                     joinCounter = 0;
+                    candidateCounter = 0;
                     if (leftRow)
                     {
                         eog = false;
@@ -1273,6 +1325,7 @@ protected:
                     RtlDynamicRowBuilder rowBuilder(allocator);
                     while (rhsNext)
                     {
+                        candidateCounter++;
                         if (!fuzzyMatch || HELPERBASE::match(leftRow, rhsNext))
                         {
                             leftMatch = true;
@@ -1289,12 +1342,15 @@ protected:
                                         rhsNext = NULL;
                                     else
                                         rhsNext = tableProxy->getNextRHS(currentHashEntry); // NB: currentHashEntry only used for Lookup,Many case
+                                    if (!rhsNext)
+                                        matchStats.noteGroup(1, candidateCounter);
                                     return row.getClear();
                                 }
                             }
                         }
                         rhsNext = tableProxy->getNextRHS(currentHashEntry); // NB: currentHashEntry used for Lookup,Many or All cases
                     }
+                    matchStats.noteGroup(1, candidateCounter);
                     if (!leftMatch && NULL == rhsNext && 0!=(flags & JFleftouter))
                     {
                         size32_t sz = HELPERBASE::joinTransform(rowBuilder, leftRow, defaultRight, 0, JTFmatchedleft);
@@ -1330,6 +1386,7 @@ public:
 
         joined = 0;
         joinCounter = 0;
+        candidateCounter = 0;
         leftMatch = false;
         returnMany = false;
 
@@ -1472,6 +1529,7 @@ public:
     {
         joined = 0;
         joinCounter = 0;
+        candidateCounter = 0;
         leftMatch = false;
         rhsNext = NULL;
 
@@ -1631,6 +1689,11 @@ public:
     {
         ActPrintLog("LHS input finished, %" RCPF "d rows read", count);
     }
+    virtual void gatherActiveStats(CRuntimeStatisticCollection &activeStats) const override
+    {
+        PARENT::gatherActiveStats(activeStats);
+        matchStats.gatherStats(activeStats);
+    }
 };
 
 
@@ -1751,7 +1814,7 @@ protected:
 
     // NB: Only used by channel 0
     Owned<CFileOwner> overflowWriteFile;
-    Owned<IRowWriter> overflowWriteStream;
+    Owned<IExtRowWriter> overflowWriteStream;
     rowcount_t overflowWriteCount;
     OwnedMalloc<IChannelDistributor *> channelDistributors;
     unsigned nextRhsToSpill = 0;
@@ -1881,7 +1944,7 @@ protected:
                         file.setown(container.queryActivity()->createOwnedTempFile(tempName.str()));
                         VStringBuffer spillPrefixStr("clearAllNonLocalRows(%d)", SPILL_PRIORITY_SPILLABLE_STREAM);
                         // 3rd param. is skipNulls = true, the row arrays may have had the non-local rows delete already.
-                        rows.save(file->queryIFile(), spillCompInfo, true, spillPrefixStr.str()); // saves committed rows
+                        rows.save(*file, spillCompInfo, true, spillPrefixStr.str()); // saves committed rows
                         rows.flushMarker = 0; // reset because array will be moved as a consequence of further adds, so next scan must be from start
                     }
 
@@ -2900,6 +2963,7 @@ public:
             overflowWriteCount += rhsInRowsTemp.ordinality();
             ForEachItemIn(r, rhsInRowsTemp)
                 overflowWriteStream->putRow(rhsInRowsTemp.getClear(r));
+            overflowWriteFile->noteSize(overflowWriteStream->getStatistic(StSizeDiskWrite));
             return true;
         }
         if (hasFailedOverToLocal())
@@ -2949,6 +3013,7 @@ public:
         overflowWriteCount += rhsInRowsTemp.ordinality();
         ForEachItemIn(r, rhsInRowsTemp)
             overflowWriteStream->putRow(rhsInRowsTemp.getClear(r));
+        overflowWriteFile->noteSize(overflowWriteStream->getStatistic(StSizeDiskWrite));
         return true;
     }
     virtual void gatherActiveStats(CRuntimeStatisticCollection &activeStats) const
@@ -3357,7 +3422,7 @@ protected:
         }
     }
 public:
-    CAllJoinSlaveActivity(CGraphElementBase *_container) : PARENT(_container)
+    CAllJoinSlaveActivity(CGraphElementBase *_container) : PARENT(_container, allJoinActivityStatistics)
     {
         returnMany = true;
     }

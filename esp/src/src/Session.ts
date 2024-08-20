@@ -6,7 +6,7 @@ import { SMCService } from "@hpcc-js/comms";
 import { scopedLogger } from "@hpcc-js/util";
 import { cookieKeyValStore, sessionKeyValStore, userKeyValStore } from "src/KeyValStore";
 import { singletonDebounce } from "../src-react/util/throttle";
-import { parseSearch } from "../src-react/util/history";
+import { parseSearch, replaceUrl } from "../src-react/util/history";
 import { ModernMode } from "./BuildInfo";
 import * as ESPUtil from "./ESPUtil";
 
@@ -33,6 +33,15 @@ export async function fetchModernMode(): Promise<string> {
     ]).then(([sessionModernMode, userModernMode]) => {
         return sessionModernMode ?? userModernMode;
     });
+}
+
+export async function resetModernMode() {
+    await sessionStore.delete(ModernMode);
+    await userStore.delete(ModernMode);
+}
+
+export async function resetCookies() {
+    await cookieStore.deleteAll(true);
 }
 
 const isV5DirectURL = () => !!parseSearch(window.location.search)?.["Widget"];
@@ -135,6 +144,11 @@ export function formatCost(value): string {
 export function initSession() {
     if (sessionIsActive > -1) {
 
+        const redirectUrl = window.localStorage.getItem("redirectAfterLogin") ?? "";
+        if (redirectUrl) {
+            window.localStorage.removeItem("redirectAfterLogin");
+            replaceUrl(redirectUrl);
+        }
         idleWatcher.on("active", function () {
             resetESPTime();
         });

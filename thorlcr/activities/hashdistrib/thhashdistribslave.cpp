@@ -2760,25 +2760,10 @@ public:
         ::Release(writer);
         writer = NULL;
         spillFileIO->flush();
-        mergeStats(stats, this);
-        spillFile->noteSize(getStatistic(StSizeSpillFile));
+        mergeRemappedStats(stats, spillFileIO, diskToTempStatsMap);
+        stats.addStatistic(StNumSpills, 1);
+        spillFile->noteSize(spillFileIO->getStatistic(StSizeDiskWrite));
         spillFileIO.clear();
-    }
-    inline __int64 getStatistic(StatisticKind kind) const
-    {
-        switch (kind)
-        {
-        case StSizeSpillFile:
-            return spillFileIO->getStatistic(StSizeDiskWrite);
-        case StTimeSortElapsed:
-            return spillFileIO->getStatistic(StTimeDiskWriteIO);
-        case StSizeDiskWrite:
-            return 0; // Return file size as StSizeSpillFile kind. To avoid confusion, StSizeDiskWrite will not be returned
-        case StNumSpills:
-            return 1;
-        default:
-            return spillFileIO->getStatistic(kind);
-        }
     }
 // IRowWriter
     virtual void putRow(const void *row) override
@@ -4042,6 +4027,7 @@ public:
         strmR.clear();
         {
             CriticalBlock b(joinHelperCrit);
+            joinhelper->gatherStats(inactiveStats);
             joinhelper.clear();
         }
         PARENT::stop();
@@ -4087,6 +4073,7 @@ public:
         }
         else
         {
+            joinhelper->gatherStats(activeStats);
             activeStats.setStatistic(StNumLeftRows, joinhelper->getLhsProgress());
             activeStats.setStatistic(StNumRightRows, joinhelper->getRhsProgress());
         }

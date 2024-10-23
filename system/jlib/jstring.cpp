@@ -1056,12 +1056,26 @@ StringBuffer &replaceStringNoCase(StringBuffer & result, size_t lenSource, const
 // this method will replace all occurrences of "oldStr" with "newStr"
 StringBuffer & StringBuffer::replaceString(const char* oldStr, const char* newStr)
 {
-    if (curLen)
+    if (curLen && oldStr)
     {
         StringBuffer temp;
-        size_t oldlen = oldStr ? strlen(oldStr) : 0;
+        size_t oldlen = strlen(oldStr);
+
+        if (oldlen > curLen)
+            return *this;
+
         size_t newlen = newStr ? strlen(newStr) : 0;
-        ::replaceString(temp, curLen, buffer, oldlen, oldStr, newlen, newStr);
+
+        if (oldlen == curLen)
+        {
+            if (memcmp(buffer, oldStr, oldlen) == 0)
+                temp.append(newlen, newStr);
+            else
+                return *this;
+        }
+        else
+            ::replaceString(temp, curLen, buffer, oldlen, oldStr, newlen, newStr);
+
         swapWith(temp);
     }
     return *this;

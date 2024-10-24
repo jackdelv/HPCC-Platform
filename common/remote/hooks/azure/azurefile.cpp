@@ -459,12 +459,15 @@ AzureFile::AzureFile(const char *_azureFileName) : fullName(_azureFileName)
 
         StringBuffer planeName(slash-filename, filename);
         Owned<IPropertyTree> plane = getStoragePlane(planeName);
+        if (!plane)
+            throw makeStringExceptionV(99, "Unknown storage plane %s", planeName.str());
+
         const char * api = plane->queryProp("storageapi/@type");
         if (!api)
             throw makeStringExceptionV(99, "No storage api defined for plane %s", planeName.str());
 
         constexpr size_t lenPrefix = strlen(azureBlobPrefix);
-        if ((strncmp(api, azureBlobPrefix, lenPrefix-1) != 0) || api[lenPrefix-1] != ':')
+        if ((strncmp(api, azureBlobPrefix, lenPrefix-1) != 0))
             throw makeStringExceptionV(99, "Storage api for plane %s is not azureblob", planeName.str());
 
         unsigned numDevices = plane->getPropInt("@numDevices", 1);
@@ -1096,7 +1099,7 @@ protected:
     {
         if (startsWith(fileName, azureBlobPrefix))
             return true;
-        if (startsWith(fileName, azureFilePrefix))
+        if (!startsWith(fileName, azureFilePrefix))
             return false;
         const char * filename = fileName + strlen(azureFilePrefix);
         const char * slash = strchr(filename, '/');

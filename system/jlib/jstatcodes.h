@@ -357,10 +357,6 @@ enum StatisticKind
     StCostAbort,
     StNumRowsRead,
     StNumRowsWritten,
-    StTimeQueryConsume,
-    StCycleQueryConsumeCycles,
-    StNumSuccesses,
-    StNumSoapcallRetries,
     StMax,
 
     //For any quantity there is potentially the following variants.

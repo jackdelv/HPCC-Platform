@@ -1024,10 +1024,6 @@ static const constexpr StatisticMeta statsMetaData[StMax] = {
     { COSTSTAT(Abort), "The cost associated with aborted actions" },
     { NUMSTAT(RowsRead), "The number of rows read from an input" },
     { NUMSTAT(RowsWritten), "The number of rows written to an output" },
-    { TIMESTAT(QueryConsume), "The total time spent consuming and processing a query input" },
-    { CYCLESTAT(QueryConsume) },
-    { NUMSTAT(Successes), "The number of times something was successful" },
-    { NUMSTAT(SoapcallRetries), "The number of times a soapcall request retries" },
 };
 
 static MapStringTo<StatisticKind, StatisticKind> statisticNameMap(true);

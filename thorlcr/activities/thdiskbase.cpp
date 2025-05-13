@@ -480,8 +480,6 @@ void CWriteMasterBase::slaveDone(size32_t slaveIdx, MemoryBuffer &mb)
         mb.read(size);
         mb.read(physicalSize);
 
-        unsigned fileCrc;
-        mb.read(fileCrc);
         CDateTime modifiedTime(mb);
 
         IPartDescriptor *partDesc = fileDesc->queryPart(targetOffset+slaveIdx);
@@ -489,7 +487,6 @@ void CWriteMasterBase::slaveDone(size32_t slaveIdx, MemoryBuffer &mb)
         props.setPropInt64("@size", size);
         if (fileDesc->isCompressed())
             props.setPropInt64("@compressedSize", physicalSize);
-        props.setPropInt64("@fileCrc", fileCrc);
         StringBuffer timeStr;
         modifiedTime.getString(timeStr);
         props.setProp("@modified", timeStr.str());

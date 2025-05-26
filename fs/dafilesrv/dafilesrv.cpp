@@ -986,3 +986,7 @@ int main(int argc, const char* argv[])
     return 0;
 }
 
+#if defined(EMSCRIPTEN)
+int daemon(int, int) { return -1; }
+#endif
+

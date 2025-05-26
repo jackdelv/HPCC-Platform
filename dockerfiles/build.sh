@@ -102,7 +102,6 @@ function doBuild() {
 
     mkdir -p $HOME/.ccache
     docker run --rm \
-        --user $USER_ID:$GROUP_ID \
         --mount source="$(pwd)",target=/hpcc-dev/HPCC-Platform,type=bind,consistency=cached \
         --mount source="$(realpath ~)/.cache/vcpkg",target=/root/.cache/vcpkg,type=bind,consistency=cached \
         --mount source="$HOME/.ccache",target=/root/.ccache,type=bind,consistency=cached \

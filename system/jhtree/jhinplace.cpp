@@ -2329,11 +2329,17 @@ CInplaceLeafWriteNode::CInplaceLeafWriteNode(offset_t _fpos, CKeyHdr *_keyHdr, I
 bool CInplaceLeafWriteNode::add(offset_t pos, const void * _data, size32_t size, unsigned __int64 sequence)
 {
     if (0xffff == hdr.numKeys)
+    {
+        compressor.close();
         return false;
+    }
 
     const size32_t prevUncompressedLen = uncompressed.length();
     if ((prevUncompressedLen > maxBytes * ctx.options.maxCompressionFactor) && (firstUncompressed == prevUncompressedLen))
+    {
+        compressor.close();
         return false;
+    }
 
     if (0 == hdr.numKeys)
     {
@@ -2458,7 +2464,10 @@ bool CInplaceLeafWriteNode::add(offset_t pos, const void * _data, size32_t size,
                     //Need to open with limit of nodeSize and then reduce, because it is possible that adding a keyed
                     //component can *reduce* the compressed keyed size (and so leave more room for the payload) -
                     //because of the commoning up of identical trailing components
-                    compressor.open(compressed.mem(), nodeSize, ctx.compressionHandler, ctx.compressionOptions, isVariable, fixedSize);
+                    if (ctx.options.reuseCompressor)
+                        compressor.open(compressed.mem(), nodeSize, ctx.compressor, isVariable, fixedSize);
+                    else
+                        compressor.open(compressed.mem(), nodeSize, ctx.compressionHandler, ctx.compressionOptions, isVariable, fixedSize);
                     openedCompressor = true;
                     if (compressor.adjustLimit(maxPayloadSize))
                         success = compressor.write(uncompressed.bytes(), uncompressedSize);
@@ -2514,8 +2523,8 @@ bool CInplaceLeafWriteNode::add(offset_t pos, const void * _data, size32_t size,
         positionInfo = savedPositionInfo;
         unsigned nowSize = getDataSize(true);
         assertex(oldSize == nowSize);
-        if (nowSize > maxBytes)
-            throw makeStringExceptionV(0, "Internal error: Leaf grew too large after ignoring row @%llu:%u (%u > %u)", getFpos(), hdr.numKeys, hdr.keyBytes, maxBytes);
+
+        compressor.close();
 
 #ifdef TRACE_BUILDING
         DBGLOG("---- leaf ----");
@@ -2539,11 +2548,23 @@ bool CInplaceLeafWriteNode::recompressAll(unsigned maxPayloadSize)
     MemoryAttr tempCompressed(nodeSize);
     size32_t fixedSize = isVariable ? 0 : keyLen - keyCompareLen;
 
-    bool ok = compressor.compressBlock(maxPayloadSize, tempCompressed.mem(), uncompressed.length(), uncompressed.bytes(), ctx.compressionHandler, ctx.compressionOptions, isVariable, fixedSize);
+    bool ok;
+    size32_t written;
+    if (ctx.options.reuseCompressor)
+    {
+        assertex(ctx.compressor->supportsBlockCompression());
+        written = ctx.compressor->compressBlock(maxPayloadSize, tempCompressed.mem(), uncompressed.length(), uncompressed.bytes());
+        ok = (written != 0);
+    }
+    else
+    {
+        ok = compressor.compressBlock(maxPayloadSize, tempCompressed.mem(), uncompressed.length(), uncompressed.bytes(), ctx.compressionHandler, ctx.compressionOptions, isVariable, fixedSize);
+        written = compressor.buflen();
+    }
     if (ok)
     {
         compressed.swapWith(tempCompressed);
-        sizeCompressedPayload = compressor.buflen();
+        sizeCompressedPayload = written;
         firstUncompressed = uncompressed.length();
     }
     return ok;
@@ -2770,6 +2791,10 @@ InplaceIndexCompressor::InplaceIndexCompressor(size32_t keyedSize, const CKeyHdr
             else if (strieq(option, "compressopt"))
             {
                 ctx.compressionOptions.append(',').append(value);
+            }
+            else if (strieq(option, "reuse"))
+            {
+                ctx.options.reuseCompressor = strToBool(value);
             }
             else
             {

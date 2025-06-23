@@ -443,6 +443,9 @@ constexpr TraceFlags traceSmartStepping = TraceFlags::flag28;
 constexpr TraceFlags traceAborts = TraceFlags::flag29;
 constexpr TraceFlags traceAcknowledge = TraceFlags::flag30;
 
+// Specific to Thor
+constexpr TraceFlags traceGraphDtor = TraceFlags::flag16; // trace timing of graph destruction
+
 // Specific to dfuserver and dafilesrv
 constexpr TraceFlags traceSprayDetails = TraceFlags::flag16;
 constexpr TraceFlags tracePartitionDetails = TraceFlags::flag17;
@@ -489,6 +492,16 @@ constexpr std::initializer_list<TraceOption> roxieTraceOptions
     TRACEOPT(traceAborts),
     TRACEOPT(traceAcknowledge),
     TRACEOPT(traceDaFsClient),
+};
+
+constexpr std::initializer_list<TraceOption> thorTraceOptions
+{
+    TRACEOPT(traceNone),
+    TRACEOPT(traceAll),             // place before the other options so you can enable all and selectively disable
+    TRACEOPT(traceStandard),
+    TRACEOPT(traceDetailed),
+    TRACEOPT(traceMax),
+    TRACEOPT(traceGraphDtor),
 };
 
 constexpr std::initializer_list<TraceOption> eclccTraceOptions

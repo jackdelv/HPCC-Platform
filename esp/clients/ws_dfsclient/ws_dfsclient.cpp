@@ -405,7 +405,7 @@ public:
                     if (isEmptyString(localMappedPlaneName))
                         throw makeStringExceptionV(0, "Remote plane '%s' not found in remote storage definition '%s'", remotePlaneName, remoteName);
 
-                    Owned<IStoragePlane> localPlane = getRemoteStoragePlane(localMappedPlaneName, false);
+                    Owned<const IStoragePlane> localPlane = getRemoteStoragePlane(localMappedPlaneName, false);
                     if (!localPlane)
                         throw makeStringExceptionV(0, "Local plane not found, mapped to by remote storage '%s' (%s->%s)", remoteName, remotePlaneName, localMappedPlaneName);
 
@@ -1007,7 +1007,7 @@ public:
             }
             else
                 getDefaultStoragePlane(cluster);
-            Owned<IStoragePlane> plane = getDataStoragePlane(cluster, true);
+            Owned<const IStoragePlane> plane = getDataStoragePlane(cluster, true);
             dir.append(plane->queryPrefix());
             unsigned numStripedDevices = plane->numDevices();
             stripeNum = calcStripeNumber(0, lfn.get(), numStripedDevices);

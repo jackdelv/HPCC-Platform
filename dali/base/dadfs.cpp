@@ -11490,12 +11490,11 @@ public:
 
     IMPLEMENT_IINTERFACE_USING(Thread);
 
-    CDaliDFSServer(IPropertyTree *config)
-        : Thread("CDaliDFSServer"), CTransactionLogTracker(MDFS_MAX)
+    CDaliDFSServer() : Thread("CDaliDFSServer"), CTransactionLogTracker(MDFS_MAX)
     {
         stopped = true;
         defaultTimeout = INFINITE; // server uses default
-        numThreads = getComponentConfigSP()->getPropInt("expert/@daliDfsPoolLimit", config->getPropInt("DFS/@numThreads", DEFAULT_NUM_DFS_THREADS));
+        numThreads = getComponentConfigSP()->getPropInt("expert/@daliDfsPoolLimit", getComponentConfigSP()->getPropInt("dfs/@numThreads", DEFAULT_NUM_DFS_THREADS));
         PROGLOG("DFS Server: numThreads=%d", numThreads);
     }
 
@@ -12674,11 +12673,10 @@ void CDistributedFileDirectory::setDefaultPreferredClusters(const char *clusters
     defprefclusters.set(clusters);
 }
 
-IDaliServer *createDaliDFSServer(IPropertyTree *config)
+IDaliServer *createDaliDFSServer()
 {
     assertex(!daliDFSServer); // initialization problem
-    daliDFSServer = new CDaliDFSServer(config);
-    return daliDFSServer;
+    return new CDaliDFSServer();
 }
 
 IDistributedFileTransaction *createDistributedFileTransaction(IUserDescriptor *user, ICodeContext *ctx)

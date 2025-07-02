@@ -71,7 +71,8 @@ public:
     {
     }
 
-    unsigned __int64 getStatistic(StatisticKind kind) override;
+    virtual unsigned __int64 getStatistic(StatisticKind kind) override;
+    virtual IFile * queryFile() const;
 
 protected:
     Linked<AzureFile> file;
@@ -312,6 +313,11 @@ offset_t AzureFileIO::size()
 unsigned __int64 AzureFileIO::getStatistic(StatisticKind kind)
 {
     return stats.getStatistic(kind);
+}
+
+IFile * AzureFileIO::queryFile() const
+{
+    return file;
 }
 
 //---------------------------------------------------------------------------------------------------------------------

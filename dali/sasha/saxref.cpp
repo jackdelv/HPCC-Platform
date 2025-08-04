@@ -1035,14 +1035,11 @@ public:
             file.setown(createIFile(rfn));
         Owned<IDirectoryIterator> iter;
         Owned<IException> e;
-        {
-            CriticalUnblock unblock(crit); // not strictly necessary if numThreads==1, but no harm
-            try {
-                iter.setown(file->directoryFiles(NULL,false,true));
-            }
-            catch (IException *_e) {
-                e.setown(_e);
-            }
+        try {
+            iter.setown(file->directoryFiles(NULL,false,true));
+        }
+        catch (IException *_e) {
+            e.setown(_e);
         }
         if (e) {
             StringBuffer tmp(LOGPFX "scanDirectory ");
@@ -1103,6 +1100,7 @@ public:
                 iter->getModifiedTime(dt);
                 if (!fileFiltered(path.str(),dt)) {
                     try {
+                        CriticalBlock block(crit);
                         pdir->addFile(drv,fname.str(),fsz,dt,node,ep,*grp,numnodes,&mem);
                     }
                     catch (IException *e) {
@@ -1125,7 +1123,10 @@ public:
                 return false;
             path.setLength(dsz);
         }
-        pdir->addNodeStats(node,drv,nsz);
+        {
+            CriticalBlock block(crit);
+            pdir->addNodeStats(node,drv,nsz);
+        }
         return true;
 
     }
@@ -1154,7 +1155,6 @@ public:
             {
                 if (abort)
                     return;
-                CriticalBlock block(crit);
                 if (!ok||abort)
                     return;
 

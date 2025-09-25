@@ -3408,7 +3408,6 @@ CPPUNIT_TEST_SUITE_NAMED_REGISTRATION(JlibIPTTest, "JlibIPTTest");
 #include "platform.h"
 #include "jfile.ipp"
 #include "jptree.hpp"
-#include "jptree.ipp"
 #include "jiface.hpp"
 #include "jio.hpp"
 #include "jstring.hpp"

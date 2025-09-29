@@ -312,13 +312,13 @@ export const DevTitle: React.FunctionComponent<DevTitleProps> = ({
 
     return <div style={{ backgroundColor: titlebarColorSet ? titlebarColor : theme.palette.themeLight }}>
         <BannerMessageBar />
-        <Stack horizontal verticalAlign="center" horizontalAlign="space-between">
-            <Stack.Item align="center">
-                <Stack horizontal>
-                    <Stack.Item>
+        <StackShim horizontal verticalAlign="center" horizontalAlign="space-between">
+            <StackItemShim align="center">
+                <StackShim horizontal>
+                    <StackItemShim>
                         <IconButton iconProps={waffleIcon} onClick={() => setNavWideMode(!navWideMode)} style={{ width: 48, height: 48, color: titlebarColorSet ? Utility.textColor(titlebarColor) : theme.palette.themeDarker }} />
-                    </Stack.Item>
-                    <Stack.Item align="center">
+                    </StackItemShim>
+                    <StackItemShim align="center">
                         <Link href="#/activities">
                             <Text variant="large" nowrap block >
                                 <b title="ECL Watch" style={{ paddingLeft: "8px", color: titlebarColorSet ? Utility.textColor(titlebarColor) : theme.palette.themeDarker }}>
@@ -326,31 +326,31 @@ export const DevTitle: React.FunctionComponent<DevTitleProps> = ({
                                 </b>
                             </Text>
                         </Link>
-                    </Stack.Item>
-                </Stack>
-            </Stack.Item>
-            <Stack.Item align="center">
+                    </StackItemShim>
+                </StackShim>
+            </StackItemShim>
+            <StackItemShim align="center">
                 <SearchBox onKeyUp={onSearchKeyUp} contentAfter={<NewTabButton onClick={onSearchNewTabClick} />} placeholder={nlsHPCC.PlaceholderFindText} style={{ minWidth: 320 }} />
-            </Stack.Item>
-            <Stack.Item align="center" >
-                <Stack horizontal>
+            </StackItemShim>
+            <StackItemShim align="center" >
+                <StackShim horizontal>
                     {currentUser?.username &&
-                        <Stack.Item styles={personaStyles}>
+                        <StackItemShim styles={personaStyles}>
                             <Persona {...personaProps} onClick={() => setShowMyAccount(true)} />
-                        </Stack.Item>
+                        </StackItemShim>
                     }
-                    <Stack.Item align="center">
+                    <StackItemShim align="center">
                         <DefaultButton href="#/log" title={nlsHPCC.ErrorWarnings} iconProps={{ iconName: logCount > 0 ? "RingerSolid" : "Ringer" }} className={btnStyles.errorsWarnings}>
                             <CounterBadge appearance="filled" size="small" color={logIconColor} count={logCount} />
                         </DefaultButton>
-                    </Stack.Item>
-                    <Stack.Item align="center">
+                    </StackItemShim>
+                    <StackItemShim align="center">
                         <IconButton title={nlsHPCC.Advanced} iconProps={collapseMenuIcon} menuProps={advMenuProps} style={{ color: titlebarColorSet ? Utility.textColor(titlebarColor) : theme.palette.themeDarker }} />
-                    </Stack.Item>
-                </Stack>
+                    </StackItemShim>
+                </StackShim>
                 <Toaster toasterId={toasterId} position={"top-end"} pauseOnHover />
-            </Stack.Item>
-        </Stack>
+            </StackItemShim>
+        </StackShim>
         <About eclwatchVersion="9" show={showAbout} onClose={() => setShowAbout(false)} ></About>
         <MyAccount currentUser={currentUser} show={showMyAccount} onClose={() => setShowMyAccount(false)}></MyAccount>
         <TitlebarConfig showForm={showTitlebarConfig} setShowForm={setShowTitlebarConfig} />

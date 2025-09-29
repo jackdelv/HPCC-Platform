@@ -387,14 +387,14 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
                         <HolyGrail
                             header={<Stack horizontal tokens={{ childrenGap: 4 }}>
                                 <ToggleButton appearance="subtle" icon={includePendingItems ? <BranchForkFilled /> : <BranchForkHintRegular />} title={nlsHPCC.IncludePendingItems} checked={includePendingItems} onClick={() => { setIncludePendingItems(!includePendingItems); }} />
-                                <Stack.Item grow>
+                                <StackItemShim grow>
                                     <TooltipHost content={nlsHPCC.FilterMetricsTooltip}>
                                         <SearchBox key={scopeFilterVersion} defaultValue={scopeFilter} onChange={onChangeScopeFilter} placeholder={nlsHPCC.Filter} contentBefore={filterIcon} className={styles.searchBox} />
                                     </TooltipHost>
-                                </Stack.Item>
+                                </StackItemShim>
                                 <ToggleButton appearance="subtle" icon={matchCase ? <TextCaseTitleFilled /> : <TextCaseTitleRegular />} title={nlsHPCC.MatchCase} checked={matchCase} onClick={() => { setMatchCase(!matchCase); }} />
                                 <ToggleButton appearance="subtle" icon={matchWholeWord ? <TextWholeWordFilled /> : <TextWholeWordRegular />} title={nlsHPCC.MatchWholeWord} checked={matchWholeWord} onClick={() => { setMatchWholeWord(!matchWholeWord); }} />
-                            </Stack>}
+                            </StackShim>}
                             main={<AutosizeHpccJSComponent widget={scopesTable} ></AutosizeHpccJSComponent>}
                         />
                     </DockPanelItem>

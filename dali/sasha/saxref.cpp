@@ -26,7 +26,6 @@
 #include "dalienv.hpp"
 #include "rmtfile.hpp"
 
-#include "saserver.hpp"
 #include "sautil.hpp"
 #include "sacoalescer.hpp"
 #include "sacmd.hpp"
@@ -1199,9 +1198,9 @@ public:
         log(false, "Max memory = %d MB", maxMb);
 
         StringBuffer userName;
-        serverConfig->getProp("@user", userName);
+        getComponentConfigSP()->getProp("@user", userName);
         if (userName.isEmpty()) // for backward compatibility
-            serverConfig->getProp("@sashaUser", userName);
+            getComponentConfigSP()->getProp("@sashaUser", userName);
         udesc.setown(createUserDescriptor());
         udesc->set(userName.str(), nullptr);
 
@@ -1339,9 +1338,9 @@ public:
             const char *rdir = "thor";
             StringBuffer datadir;
             StringBuffer repdir;
-            if (getConfigurationDirectory(serverConfig->queryPropTree("Directories"),"data","thor",_clustname,datadir))
+            if (getConfigurationDirectory(getComponentConfigSP()->queryPropTree("Directories"),"data","thor",_clustname,datadir))
                 ddir = datadir.str();
-            if (getConfigurationDirectory(serverConfig->queryPropTree("Directories"),"mirror","thor",_clustname,repdir))
+            if (getConfigurationDirectory(getComponentConfigSP()->queryPropTree("Directories"),"mirror","thor",_clustname,repdir))
                 rdir = repdir.str();
             iswin = grp->ordinality()?(getDaliServixOs(grp->queryNode(0).endpoint())==DAFS_OSwindows):false;
             setBaseDirectory(ddir,0,iswin?DFD_OSwindows:DFD_OSunix);
@@ -2809,7 +2808,7 @@ public:
         synchronized block(runmutex);
         if (stopped)
             return;
-        CSuspendAutoStop suspendstop;
+        Owned<IInterface> suspendstop = queryServerContext().createAutoStopSuspender();
         PROGLOG(LOGPFX "Started %s",clustcsl);
         StringArray list;
         getFileGroups(clustcsl, list);
@@ -2959,7 +2958,7 @@ public:
             props.setown(getComponentConfig());
         else
         {
-            props.setown(serverConfig->getPropTree("DfuXRef"));
+            props.setown(getComponentConfigSP()->getPropTree("DfuXRef"));
             if (!props)
                 props.setown(createPTree("DfuXRef"));
         }
@@ -3073,7 +3072,7 @@ public:
 #ifdef _CONTAINERIZED
         props->getProp("@user", userName);
 #else
-        serverConfig->getProp("@sashaUser", userName);
+        getComponentConfigSP()->getProp("@sashaUser", userName);
 #endif
         udesc.setown(createUserDescriptor());
         udesc->set(userName.str(), nullptr);
@@ -3413,9 +3412,9 @@ ISashaServer *createSashaFileExpiryServer()
 {
     assertex(!sashaExpiryServer); // initialization problem
 #ifdef _CONTAINERIZED
-    Linked<IPropertyTree> config = serverConfig;
+    Owned<IPropertyTree> config = getComponentConfig();
 #else
-    Owned<IPropertyTree> config = serverConfig->getPropTree("DfuExpiry");
+    Owned<IPropertyTree> config = getComponentConfigSP()->getPropTree("DfuExpiry");
     if (!config)
         config.setown(createPTree("DfuExpiry"));
 #endif
@@ -3425,7 +3424,7 @@ ISashaServer *createSashaFileExpiryServer()
 
 void runExpiryCLI()
 {
-    Owned<IPropertyTree> config = serverConfig->getPropTree("DfuExpiry");
+    Owned<IPropertyTree> config = getComponentConfigSP()->getPropTree("DfuExpiry");
     if (!config)
         config.setown(createPTree("DfuExpiry"));
     Owned<CSashaExpiryServer> sashaExpiryServer = new CSashaExpiryServer(config);

@@ -3366,14 +3366,14 @@ IHqlExpression * ensureExprType(IHqlExpression * expr, ITypeInfo * type, node_op
                 promotedType.set(castType);
             else if (!isSameBasicType(promotedType, castType))
             {
-                if (promotedType->getSize() != UNKNOWN_LENGTH)
+                if (!isUnknownLength(promotedType->getSize()))
                 {
                     promotedType.setown(getStretchedType(UNKNOWN_LENGTH, childType));
                 }
             }
         }
 
-        if (promotedType && (childType->getSize() != UNKNOWN_LENGTH))
+        if (promotedType && !isUnknownLength(childType->getSize()))
             type = makeSetType(promotedType.getClear());
         else
             type->Link();
@@ -3383,7 +3383,7 @@ IHqlExpression * ensureExprType(IHqlExpression * expr, ITypeInfo * type, node_op
     {
         return ensureExprType(expr, type->queryPromotedType(), castOp);
     }
-    else if (type->getStringLen() == UNKNOWN_LENGTH)
+    else if (isUnknownLength(type->getStringLen()))
     {
         //Optimize away casts to unknown length if the rest of the type matches.
         if (exprType->getTypeCode() == tc)
@@ -3413,7 +3413,7 @@ IHqlExpression * ensureExprType(IHqlExpression * expr, ITypeInfo * type, node_op
 
         /*
         The following might produce better code, but it generally makes things worse.....
-        if ((exprType->getSize() != UNKNOWN_LENGTH) && (isStringType(exprType) || isUnicodeType(exprType)))
+        if (!isUnknownLength(((exprType->getSize())) && (isStringType(exprType) || isUnicodeType(exprType)))
         {
             Owned<ITypeInfo> stretchedType = getStretchedType(exprType->getStringLen(), type);
             return ensureExprType(expr, stretchedType, castOp);
@@ -3543,7 +3543,7 @@ extern HQL_API IHqlExpression * simplifyFixedLengthList(IHqlExpression * expr)
 
     ITypeInfo * listType = expr->queryType();
     ITypeInfo * elemType = listType->queryChildType();
-    if (!elemType || (elemType->getSize() != UNKNOWN_LENGTH))
+    if (!elemType || !isUnknownLength(elemType->getSize()))
         return LINK(expr);
 
     unsigned max = expr->numChildren();
@@ -3554,7 +3554,7 @@ extern HQL_API IHqlExpression * simplifyFixedLengthList(IHqlExpression * expr)
     ForEachChild(i, expr)
     {
         unsigned thisSize = expr->queryChild(i)->queryType()->getStringLen();
-        if (thisSize == UNKNOWN_LENGTH)
+        if (isUnknownLength(thisSize))
             return LINK(expr);
         if (i == 0)
             elemSize = thisSize;
@@ -11146,7 +11146,7 @@ unsigned CHqlAlienType::getCrc()
 unsigned CHqlAlienType::getMaxSize()
 {
     unsigned size = physical->getSize();
-    if (size != UNKNOWN_LENGTH)
+    if (!isUnknownLength(size))
         return size;
 
     OwnedHqlExpr maxSize = lookupSymbol(maxSizeId);
@@ -12441,13 +12441,13 @@ static void normalizeCallParameters(HqlExprArray & resolvedActuals, IHqlExpressi
                 case type_function:
                     break;
                 case type_unicode:
-                    if ((type->getSize() == UNKNOWN_LENGTH) && (actual->queryType()->getTypeCode() == type_varunicode))
+                    if (isUnknownLength(type->getSize()) && (actual->queryType()->getTypeCode() == type_varunicode))
                         break;
                     actual.setown(ensureExprType(actual, type));
                     break;
     #if 0
                 case type_string:
-                    if (type->getSize() == UNKNOWN_LENGTH)
+                    if (isUnknownLength(type->getSize()))
                     {
                         ITypeInfo * actualType = actual->queryType();
                         if ((actualType->getTypeCode() == type_varstring) && (actualType->queryCharset() == type->queryCharset())))
@@ -14269,9 +14269,9 @@ static unsigned exportRecord(IPropertyTree *dataNode, IHqlExpression * record, u
                 break;
             }
         }
-        if (size != UNKNOWN_LENGTH)
+        if (!isUnknownLength(size))
         {
-            if (thisSize != UNKNOWN_LENGTH)
+            if (!isUnknownLength(thisSize))
                 size += thisSize;
             else
                 size = UNKNOWN_LENGTH;
@@ -16917,7 +16917,7 @@ ITypeInfo * getSumAggType(ITypeInfo * argType)
         {
             //A guess is to add 12 more digits 
             unsigned oldDigits = argType->getDigits();
-            if (oldDigits == UNKNOWN_LENGTH)
+            if (isUnknownLength(oldDigits))
                 return LINK(argType);
             unsigned oldPrecision = argType->getPrecision();
             unsigned newDigits = argType->getDigits()+12;

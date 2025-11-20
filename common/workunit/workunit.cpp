@@ -11249,7 +11249,7 @@ void readRow(StringBuffer &out, MemoryBuffer &in, TypeInfoArray &types, StringAt
         switch(type.getTypeCode())
         {
         case type_data:
-            if (size==UNKNOWN_LENGTH)
+            if (isUnknownLength(size))
             {
                 if (in.remaining() < sizeof(int))
                     throw MakeStringException(WUERR_CorruptResult, "corrupt workunit information");
@@ -11258,7 +11258,7 @@ void readRow(StringBuffer &out, MemoryBuffer &in, TypeInfoArray &types, StringAt
             outputXmlData(size, in.readDirect(size), name.text, out);
             break;
         case type_string:
-            if (size==UNKNOWN_LENGTH)
+            if (isUnknownLength(size))
             {
                 if (in.remaining() < sizeof(int))
                     throw MakeStringException(WUERR_CorruptResult, "corrupt workunit information");
@@ -11268,7 +11268,7 @@ void readRow(StringBuffer &out, MemoryBuffer &in, TypeInfoArray &types, StringAt
             break;
         case type_varstring:
             {
-                if (size == UNKNOWN_LENGTH)
+                if (isUnknownLength(size))
                     size = (size32_t)strlen((const char *) in.readDirect(0))+1;
                 const char * text = (const char *) in.readDirect(size);
                 outputXmlString((size32_t)strlen(text), text, name.text, out);
@@ -11277,7 +11277,7 @@ void readRow(StringBuffer &out, MemoryBuffer &in, TypeInfoArray &types, StringAt
         case type_unicode:
             {
                 unsigned len = type.getStringLen();
-                if (size==UNKNOWN_LENGTH)
+                if (isUnknownLength(size))
                     in.read(len);
                 outputXmlUnicode(len, (UChar const *) in.readDirect(len*2), name.text, out);
             }
@@ -11285,7 +11285,7 @@ void readRow(StringBuffer &out, MemoryBuffer &in, TypeInfoArray &types, StringAt
         case type_utf8:
             {
                 unsigned len = type.getStringLen();
-                if (size==UNKNOWN_LENGTH)
+                if (isUnknownLength(size))
                 {
                     in.read(len);
                     size = rtlUtf8Size(len, in.readDirect(0));
@@ -11296,7 +11296,7 @@ void readRow(StringBuffer &out, MemoryBuffer &in, TypeInfoArray &types, StringAt
         case type_qstring:
             {
                 unsigned len = type.getStringLen();
-                if (size==UNKNOWN_LENGTH)
+                if (isUnknownLength(size))
                     in.read(len);
                 unsigned outlen;
                 char *outstr;

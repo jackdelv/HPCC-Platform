@@ -120,6 +120,18 @@ test.describe("V9 Workunit Details", () => {
     });
 
     test("Should display command bar buttons", async ({ page }) => {
+        // CommandBar items may be in overflow menu, click it first
+        const overflowButton = page.locator(".ms-CommandBar .ms-OverflowSet-overflowButton").or(
+            page.locator("button[aria-label='More items']")).or(
+                page.locator(".ms-CommandBar button").last()
+            );
+
+        // Click overflow if it exists
+        if (await overflowButton.count() > 0) {
+            await overflowButton.first().click();
+            await page.waitForTimeout(300);
+        }
+
         // Check for main action buttons
         const expectedButtons = [
             "Refresh",
@@ -188,6 +200,17 @@ test.describe("V9 Workunit Details", () => {
     test("Should copy WUID to clipboard when copy button is clicked", async ({ page, browserName }) => {
         // Grant clipboard permissions
         await page.context().grantPermissions(["clipboard-write", "clipboard-read"]);
+
+        // CommandBar items may be in overflow menu, click it first
+        const overflowButton = page.locator(".ms-CommandBar .ms-OverflowSet-overflowButton").or(
+            page.locator("button[aria-label='More items']")).or(
+                page.locator(".ms-CommandBar button").last()
+            );
+
+        if (await overflowButton.count() > 0) {
+            await overflowButton.first().click();
+            await page.waitForTimeout(300);
+        }
 
         // Click copy WUID button
         await page.getByRole("menuitem", { name: "Copy WUID" }).click();

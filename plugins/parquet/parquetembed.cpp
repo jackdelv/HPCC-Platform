@@ -841,10 +841,9 @@ ParquetWriter::ParquetWriter(const char *option, const char *_destination, int _
     : maxRowCountInBatch(_maxRowCountInBatch), partOption(option), destination(_destination), overwrite(_overwrite), activityCtx(_activityCtx), compressionOption(_compressionOption)
 {
     pool = arrow::default_memory_pool();
-    if (activityCtx->querySlave() == 0 && startsWithIgnoreCase(partOption.c_str(), "write"))
-    {
-        reportIfFailure(checkDirContents());
-    }
+    dbgassertex(startsWithIgnoreCase(partOption.c_str(), "write"));
+
+    // Verify partition fields before calling checkDirContents and deleting existing files
     if (endsWithIgnoreCase(partOption.c_str(), "partition"))
     {
         std::stringstream ss(_partitionFields);
@@ -853,6 +852,16 @@ ParquetWriter::ParquetWriter(const char *option, const char *_destination, int _
         {
             partitionFields.push_back(field);
         }
+        if (partitionFields.empty())
+            failx("Partition fields must be specified when writing partitioned Parquet files.");
+    }
+
+    if (activityCtx->querySlave() == 0)
+    {
+        // To avoid race conditions when one thread is deleting files while others are writing to them,
+        // 1. Worker 0 runs `checkDirContents()` (deletes mismatched files)
+        // 2. All workers call `openWriteFile()` (truncates matching files)
+        reportIfFailure(checkDirContents());
     }
 }
 
@@ -887,8 +896,8 @@ arrow::Status ParquetWriter::openWriteFile()
         if(!endsWith(destination.c_str(), ".parquet"))
             failx("Error opening file: Invalid file extension for file %s", destination.c_str());
 
-        // Currently under the assumption that all channels and workers are given a worker id and no matter
-        // the configuration will show up in activityCtx->numSlaves()
+        // querySlave() returns the thread index regardless of channels per worker
+        // i.e. all threads across all workers will have a unique index
         unsigned numSlaves = activityCtx->numSlaves();
         if (numSlaves > 1)
         {

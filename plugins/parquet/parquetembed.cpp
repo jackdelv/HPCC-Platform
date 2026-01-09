@@ -20,6 +20,7 @@
 #include "rtlembed.hpp"
 #include "rtlds_imp.hpp"
 #include "jfile.hpp"
+#include "jutil.hpp"
 #include "rtlrecord.hpp"
 
 static constexpr const char *MODULE_NAME = "parquet";
@@ -907,7 +908,7 @@ arrow::Status ParquetWriter::openWriteFile()
 
         recursiveCreateDirectoryForFile(destination.c_str());
         std::shared_ptr<arrow::io::FileOutputStream> outfile;
-        PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(destination));
+        PARQUET_ASSIGN_OR_THROW(outfile, arrow::io::FileOutputStream::Open(destination, false)); // false = do not append. Will truncate existing file to 0 bytes
 
         // Choose compression
         std::shared_ptr<parquet::WriterProperties> props = parquet::WriterProperties::Builder().compression(compressionOption)->build();
@@ -1226,47 +1227,77 @@ void ParquetWriter::endRow()
 arrow::Status ParquetWriter::checkDirContents()
 {
     if (destination.empty())
-    {
         failx("Missing target location when writing Parquet data.");
-    }
+
     StringBuffer path;
     StringBuffer filename;
     StringBuffer ext;
     splitFilename(destination.c_str(), nullptr, &path, &filename, &ext, false);
 
-    ARROW_ASSIGN_OR_RAISE(auto filesystem, arrow::fs::FileSystemFromUriOrPath(destination));
+    // Check if destination is directory for partitioned dataset or if single part file exists
+    unsigned numThreads = activityCtx->numSlaves();
+    Owned<IFile> exactFile = createIFile(destination.c_str());
+    if (exactFile->exists())
+    {
+        if (exactFile->isFile() == fileBool::foundNo)
+        {
+            if (!endsWithIgnoreCase(partOption.c_str(), "partition"))
+                failx("The target location %s is a directory. Only partitioned datasets take a directory as a target. To write a partitioned dataset, use either ParquetIO.HivePartition.Write or ParquetIO.DirectoryPartition.Write", exactFile->queryFilename());
+            // If a directory is found, clean up subdirs for writing partitioned dataset
+            if (overwrite)
+            {
+                DBGLOG("Parquet file write: deleting directory contents in '%s'", path.str());
+                ARROW_ASSIGN_OR_RAISE(auto filesystem, arrow::fs::FileSystemFromUriOrPath(destination));
+                reportIfFailure(filesystem->DeleteDirContents(path.str()));
+                return arrow::Status::OK();
+            }
+            else
+                failx("The target directory %s is not empty. To delete the contents of the directory set the overwrite option to true.", path.str());
+        }
+        else if (overwrite)
+        {
+            if (numThreads > 1)
+            {
+              // Delete single-part file found in location where multi-part files will be written
+              DBGLOG("Parquet file write: removing existing file '%s'", exactFile->queryFilename());
+              if (!exactFile->remove())
+                  failx("Failed to remove file %s", exactFile->queryFilename());
+            }
+            // Let arrow truncate the single file to 0 bytes when writing
+        }
+        else
+            failx("The target file %s already exists. To delete the file set the overwrite option to true.", exactFile->queryFilename());
+    }
 
-    Owned<IDirectoryIterator> itr = createDirectoryIterator(path.str(), filename.appendf("*%s", ext.str()));
+    // Check for files with part mask pattern
+    StringBuffer searchPattern;
+    searchPattern.appendf("%s._*_of_*%s", filename.str(), ext.str());
+    Owned<IDirectoryIterator> itr = createDirectoryIterator(path.str(), searchPattern.str());
+
     ForEach (*itr)
     {
         IFile &file = itr->query();
-        if (file.isFile() == fileBool::foundYes)
+        unsigned partNum;
+        unsigned totalParts;
+        unsigned filenameLen;
+        StringAttr mask;
+        if (overwrite)
         {
-            if(overwrite)
+            // We should only delete the file if it was written by a different sized cluster to avoid race conditions
+            // with other threads/workers writing files. We don't need to delete files with the same total parts.
+            // When an existing file is opened again Arrow truncates it to 0 bytes before writing.
+            if (deduceMask(file.queryFilename(), false, mask, partNum, totalParts, filenameLen) && totalParts != numThreads)
             {
+                DBGLOG("Parquet file write: removing existing file '%s'", file.queryFilename());
                 if (!file.remove())
-                {
                     failx("Failed to remove file %s", file.queryFilename());
-                }
             }
-            else
-            {
-                failx("The target file %s already exists. To delete the file set the overwrite option to true.", file.queryFilename());
-            }
+            // Either didn't have part mask (should not be overwritten) or same total parts (will be truncated by Arrow)
         }
         else
-        {
-            if (overwrite)
-            {
-                reportIfFailure(filesystem->DeleteDirContents(path.str()));
-                break;
-            }
-            else
-            {
-                failx("The target directory %s is not empty. To delete the contents of the directory set the overwrite option to true.", path.str());
-            }
-        }
+            failx("The target file %s already exists. To delete the file set the overwrite option to true.", file.queryFilename());
     }
+
     return arrow::Status::OK();
 }
 

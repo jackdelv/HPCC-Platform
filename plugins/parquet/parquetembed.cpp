@@ -970,7 +970,7 @@ void ParquetWriter::writeRecordBatch()
  * @brief A helper method for updating the current row on writes and keeping
  * it within the boundary of the maxRowCountInBatch set by the user when creating RowGroups.
  */
-void ParquetWriter::updateRow()
+void ParquetWriter::incrementRecordBatchIndex()
 {
     if (++currentRow == maxRowCountInBatch)
         currentRow = 0;

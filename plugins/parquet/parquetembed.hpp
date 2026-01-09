@@ -452,8 +452,7 @@ public:
     arrow::Status openWriteFile();
     arrow::Status writePartition(std::shared_ptr<arrow::Table> table);
     void writeRecordBatch();
-    void writeRecordBatch(std::size_t newSize);
-    void updateRow();
+    void incrementRecordBatchIndex();
     std::shared_ptr<arrow::NestedType> makeChildRecord(const RtlFieldInfo *field);
     arrow::Status fieldToNode(const RtlFieldInfo *field, std::vector<std::shared_ptr<arrow::Field>> &arrowFields);
     arrow::Status fieldsToSchema(const RtlTypeInfo *typeInfo);

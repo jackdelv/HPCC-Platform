@@ -889,9 +889,11 @@ arrow::Status ParquetWriter::openWriteFile()
 
         // Currently under the assumption that all channels and workers are given a worker id and no matter
         // the configuration will show up in activityCtx->numSlaves()
-        if (activityCtx->numSlaves() > 1)
+        unsigned numSlaves = activityCtx->numSlaves();
+        if (numSlaves > 1)
         {
-            destination.insert(destination.find(".parquet"), std::to_string(activityCtx->querySlave()));
+            std::string partMask = "._" + std::to_string(activityCtx->querySlave()+1) + "_of_" + std::to_string(numSlaves);
+            destination.insert(destination.find(".parquet"), partMask);
         }
 
         recursiveCreateDirectoryForFile(destination.c_str());

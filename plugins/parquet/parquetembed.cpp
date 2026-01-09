@@ -2678,26 +2678,22 @@ bool ParquetDatasetBinder::bindNext()
  */
 void ParquetDatasetBinder::executeAll()
 {
-    if (bindNext())
+    reportIfFailure(parquetWriter->openWriteFile());
+
+    int rowCount = 0;
+    int maxRowCountInBatch = parquetWriter->getMaxRowSize();
+    while (bindNext())
     {
-        reportIfFailure(parquetWriter->openWriteFile());
+        rowCount++;
 
-        int i = 1;
-        int maxRowCountInBatch = parquetWriter->getMaxRowSize();
-        do
-        {
-            if (i % maxRowCountInBatch == 0)
-                parquetWriter->writeRecordBatch();
-
-            parquetWriter->updateRow();
-            i++;
-        }
-        while (bindNext());
-
-        i--;
-        if (i % maxRowCountInBatch != 0)
+        if (rowCount % maxRowCountInBatch == 0)
             parquetWriter->writeRecordBatch();
+
+        parquetWriter->incrementRecordBatchIndex();
     }
+
+    if (rowCount % maxRowCountInBatch != 0)
+        parquetWriter->writeRecordBatch();
 }
 
 /**

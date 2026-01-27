@@ -8214,13 +8214,14 @@ protected:
 
 static unsigned loadGroup(const IPropertyTree *groupTree, SocketEndpointArray &epa, GroupType *type, StringAttr *groupDir)
 {
+    GroupType groupType = translateGroupType(groupTree->queryProp("@kind"));
     if (type)
-        *type = translateGroupType(groupTree->queryProp("@kind"));
+        *type = groupType;
     if (groupDir)
     {
         groupDir->set(groupTree->queryProp("@dir"));
         if (groupDir->isEmpty())
-            groupDir->set(queryBaseDirectory(*type));
+            groupDir->set(queryBaseDirectory(groupType));
     }
     Owned<IPropertyTreeIterator> pe = groupTree->getElements("Node");
     ForEach(*pe)
@@ -10619,6 +10620,7 @@ StringBuffer &getClusterSpareGroupName(const IPropertyTree &cluster, StringBuffe
 {
     return getClusterGroupName(cluster, groupName).append("_spares");
 }
+
 
 // JCSMORE - dfs group handling may be clearer if in own module
 class CInitGroups

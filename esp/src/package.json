@@ -43,6 +43,7 @@
   },
   "main": "src/stub.js",
   "dependencies": {
+    "@fluentui-contrib/react-draggable-dialog": "^0.2.4",
     "@fluentui/react": "8.125.4",
     "@fluentui/react-components": "9.72.11",
     "@fluentui/react-nav-preview": "0.13.9",

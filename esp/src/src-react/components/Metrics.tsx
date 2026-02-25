@@ -66,7 +66,7 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
     const { isDark } = useUserTheme();
     const [selectedMetricsSource, setSelectedMetricsSource] = React.useState<SelectedMetricsSource>("");
     const { metrics, columns, status, refresh } = useWUQueryMetrics(wuid, querySet, queryId, logicalGraph ? scopeFilterLogicalGraph : scopeFilterMetrics);
-    const { viewIds, viewId, setViewId, view, updateView } = useMetricsViews(logicalGraph);
+    const { viewIds, viewId, setViewId, view, updateView, save } = useMetricsViews(logicalGraph);
     const metricGraphData = useMetricsGraphData(metrics, view, lineageSelection, selection);
     const { metricGraph, selectedMetrics, dot } = metricGraphData;
     const [showMetricOptions, setShowMetricOptions] = React.useState(false);
@@ -271,10 +271,11 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
             return () => {
                 if (dockpanel && updateView) {
                     updateView({ layout: dockpanel.getLayout() });
+                    save();
                 }
             };
         }
-    }, [dockpanel, updateView]);
+    }, [dockpanel, save, updateView]);
 
     //  Command Bar  ---
     const buttons = React.useMemo((): ICommandBarItemProps[] => [
@@ -300,6 +301,7 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
                     key: v, text: v, onClick: () => {
                         updateView({ layout: dockpanel.getLayout() });
                         setViewId(v);
+                        save();
                     }
                 }))
             },
@@ -308,6 +310,7 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
             key: "timeline", text: nlsHPCC.Timeline, canCheck: true, checked: view.showTimeline, hidden: logicalGraph, iconProps: { iconName: "TimelineProgress" },
             onClick: () => {
                 updateView({ showTimeline: !view.showTimeline }, true);
+                save();
             }
         },
         {
@@ -317,7 +320,7 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
                 setShowMetricOptions(true);
             }
         }
-    ].filter(item => item.hidden !== true), [dockpanel, hotspots, logicalGraph, onHotspot, refresh, setViewId, timeline, updateView, view.showTimeline, viewId, viewIds]);
+    ].filter(item => item.hidden !== true), [dockpanel, hotspots, logicalGraph, onHotspot, refresh, save, setViewId, timeline, updateView, view.showTimeline, viewId, viewIds]);
 
     const formatColumns = React.useMemo((): Utility.ColumnMap => {
         const copyColumns: Utility.ColumnMap = {};

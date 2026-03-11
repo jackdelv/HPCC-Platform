@@ -45,6 +45,7 @@ interface MetricsProps {
     querySet?: string;
     queryId?: string;
     parentUrl?: string;
+    viewSelection?: string;
     lineageSelection?: string;
     selection?: string[];
 }
@@ -56,6 +57,7 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
     querySet = "",
     queryId = "",
     parentUrl = `/workunits/${wuid}/${logicalGraph ? "logicalgraph" : "metrics"}`,
+    viewSelection,
     lineageSelection,
     selection
 }) => {
@@ -75,6 +77,35 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
     const [includePendingItems, setIncludePendingItems] = React.useState(true);
     const [matchCase, setMatchCase] = React.useState(false);
     const [matchWholeWord, setMatchWholeWord] = React.useState(false);
+
+    const pushSelectionUrl = React.useCallback((parentUrl: string, viewId: string, lineageSelection?: string, selection?: string[], replace: boolean = false) => {
+        const hasLineage = !!lineageSelection?.length;
+        const hasSelection = !!selection?.length;
+        const viewStr = (!logicalGraph && hasLineage && hasSelection) ? `/${encodeURIComponent(viewId)}` : "";
+        const lineageSelectionStr = hasLineage ? `/${lineageSelection}` : "";
+        const selectionStr = hasSelection ? `/${selection.join(",")}` : "";
+        if (replace) {
+            replaceUrl(`${parentUrl}${viewStr}${lineageSelectionStr}${selectionStr}`);
+        } else {
+            pushUrl(`${parentUrl}${viewStr}${lineageSelectionStr}${selectionStr}`);
+        }
+    }, [logicalGraph]);
+
+    //  Sync viewId FROM URL prop  ---
+    const viewSynced = React.useRef(false);
+    React.useEffect(() => {
+        if (!loaded) return;
+        if (!viewSynced.current) {
+            viewSynced.current = true;
+            const targetView = viewSelection || "Default";
+            setViewId(viewIds.includes(targetView) ? targetView : "Default");
+        }
+    }, [loaded, viewSelection, viewIds, setViewId]);
+
+    const selectionRef = React.useRef(selection);
+    selectionRef.current = selection;
+
+    const scopesTableClickRef = React.useRef(false);
 
     React.useEffect(() => {
         if (targetsRoxie && wuid) {
@@ -101,16 +132,6 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
         }
     }, [targetsRoxie, wuid]);
 
-    const pushSelectionUrl = React.useCallback((parentUrl: string, lineageSelection?: string, selection?: string[], replace: boolean = false) => {
-        const lineageSelectionStr = lineageSelection?.length ? `/${lineageSelection}` : "";
-        const selectionStr = selection?.length ? `/${selection.join(",")}` : "";
-        if (replace) {
-            replaceUrl(`${parentUrl}${lineageSelectionStr}${selectionStr}`);
-        } else {
-            pushUrl(`${parentUrl}${lineageSelectionStr}${selectionStr}`);
-        }
-    }, []);
-
     const pushSelectedMetricsUrl = React.useCallback((parentUrl: string, lineageSelection: string, selectedMetrics: IScope[]) => {
         if (!lineageSelection && selectedMetrics.length) {
             switch (selectedMetrics[0].type) {
@@ -129,13 +150,13 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
         } else {
             selection = selectedMetrics.map(row => row.__lparam?.id ?? row.id);
         }
-        pushSelectionUrl(parentUrl, lineageSelection, selection);
-    }, [pushSelectionUrl]);
+        pushSelectionUrl(parentUrl, viewId, lineageSelection, selection);
+    }, [pushSelectionUrl, viewId]);
 
     const onHotspot = React.useCallback(() => {
         setSelectedMetricsSource("hotspot");
-        pushSelectionUrl(parentUrl, lineageSelection, selection);
-    }, [lineageSelection, parentUrl, pushSelectionUrl, selection]);
+        pushSelectionUrl(parentUrl, viewId, lineageSelection, selection);
+    }, [lineageSelection, parentUrl, pushSelectionUrl, selection, viewId]);
 
     //  Timeline ---
     const timeline = useConst(() => new WUTimelineNoFetch()
@@ -189,6 +210,7 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
         scopesTable
             .on("click", debounce((row, col, sel) => {
                 if (sel) {
+                    scopesTableClickRef.current = true;
                     scopesSelectionChanged("scopesTable", lineageSelection, scopesTable.selection());
                 }
             }), true)
@@ -205,8 +227,26 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
             ;
     }, [includePendingItems, matchCase, matchWholeWord, metricGraph, metrics, scopeFilter, scopesTable, view.properties, view.scopeTypes]);
 
+    React.useEffect(() => {
+        const currentSelection = selectionRef.current;
+        if (!currentSelection?.length || !metrics?.length) return;
+        const visibleIds = new Set<string>();
+        scopesTable.data().forEach(row => {
+            const scope: IScope = row[row.length - 1];
+            visibleIds.add(scope.id);
+        });
+        const filteredSelection = currentSelection.filter(id => visibleIds.has(id));
+        if (filteredSelection.length !== currentSelection.length) {
+            pushSelectionUrl(parentUrl, viewId, filteredSelection.length ? lineageSelection : undefined, filteredSelection.length ? filteredSelection : undefined, true);
+        }
+    }, [includePendingItems, lineageSelection, matchCase, matchWholeWord, metricGraph, metrics, parentUrl, pushSelectionUrl, scopeFilter, scopesTable, view.properties, view.scopeTypes, viewId]);
+
     const updateScopesTable = React.useCallback((selection?: IScope[]) => {
-        if (scopesTable?.renderCount() > 0 && selectedMetricsSource !== "scopesTable") {
+        if (scopesTable?.renderCount() > 0) {
+            if (scopesTableClickRef.current) {
+                scopesTableClickRef.current = false;
+                return;
+            }
             scopesTable.selection([]);
             if (selection?.length) {
                 const selRows = scopesTable.data().filter(row => {
@@ -217,7 +257,7 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
                 });
             }
         }
-    }, [scopesTable, selectedMetricsSource]);
+    }, [scopesTable]);
 
     React.useEffect(() => {
         scopesTable.columnFormats()[0]?.paletteID(isDark ? "StdDevsDark" : "StdDevs");
@@ -366,17 +406,20 @@ export const Metrics: React.FunctionComponent<MetricsProps> = ({
     ], [dot, formatColumns, metrics, wuid]);
 
     const setShowMetricOptionsHook = React.useCallback((show: boolean) => {
+        if (!show) {
+            pushSelectionUrl(parentUrl, viewId, lineageSelection, selection);
+        }
         setShowMetricOptions(show);
-    }, []);
+    }, [lineageSelection, parentUrl, pushSelectionUrl, selection, viewId]);
 
     const onLineageSelectionChange = React.useCallback((lineageSelection?: string, replace?: boolean) => {
-        pushSelectionUrl(parentUrl, lineageSelection, selection, replace);
-    }, [parentUrl, pushSelectionUrl, selection]);
+        pushSelectionUrl(parentUrl, viewId, lineageSelection, selection, replace);
+    }, [parentUrl, pushSelectionUrl, selection, viewId]);
 
     const onSelectionChange = React.useCallback((selection: string[]) => {
         setSelectedMetricsSource("metricGraphWidget");
-        pushSelectionUrl(parentUrl, lineageSelection, selection);
-    }, [lineageSelection, parentUrl, pushSelectionUrl]);
+        pushSelectionUrl(parentUrl, viewId, lineageSelection, selection);
+    }, [lineageSelection, parentUrl, pushSelectionUrl, viewId]);
 
     return <HolyGrail
         header={<>

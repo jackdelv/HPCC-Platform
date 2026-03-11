@@ -42,6 +42,12 @@ const GridOptions: React.FunctionComponent<GridOptionsProps> = ({
     const [data, setData] = React.useState<{ id: string }[]>([]);
     const { setTotal, refreshTable } = useFluentStoreState({});
 
+    const setSelectionRef = React.useRef(setSelection);
+    setSelectionRef.current = setSelection;
+
+    const strSelectionRef = React.useRef(strSelection);
+    strSelectionRef.current = strSelection;
+
     const columns = React.useMemo((): FluentColumns => {
         return {
             col1: {
@@ -63,10 +69,10 @@ const GridOptions: React.FunctionComponent<GridOptionsProps> = ({
     const selectionHandler = useConst(() => {
         return new Selection({
             getKey: (item: { id: string; key: string }) => item.key,
-            onSelectionChanged: () => setSelection(selectionHandler.getSelection().map(item => item.id)),
+            onSelectionChanged: () => setSelectionRef.current(selectionHandler.getSelection().map(item => item.id)),
             onItemsChanged: () => {
                 selectionHandler.setAllSelected(false);
-                for (const str of strSelection) {
+                for (const str of strSelectionRef.current) {
                     selectionHandler.setKeySelected(str, true, false);
                 }
             }
@@ -97,20 +103,31 @@ const GridOptions: React.FunctionComponent<GridOptionsProps> = ({
 interface AddLabelProps {
     show: boolean;
     setShow: (_: boolean) => void;
+    defaultLabel?: string;
+    title?: string;
     onOk: (label: string) => void
 }
 
 export const AddLabel: React.FunctionComponent<AddLabelProps> = ({
     show,
     setShow,
+    defaultLabel = "",
+    title = nlsHPCC.Add,
     onOk
 }) => {
-    const [label, setLabel] = React.useState("");
+    const [label, setLabel] = React.useState(defaultLabel);
+
+    React.useEffect(() => {
+        if (show) {
+            setLabel(defaultLabel);
+        }
+    }, [defaultLabel, show]);
+
     const onChangeAddLabel = React.useCallback((event: React.FormEvent<HTMLInputElement | HTMLTextAreaElement>, newValue?: string) => {
         setLabel(newValue ?? "");
     }, [],);
 
-    return <MessageBox title={nlsHPCC.Add} show={show} setShow={setShow} minWidth={width}
+    return <MessageBox title={title} show={show} setShow={setShow} minWidth={width}
         footer={<>
             <PrimaryButton text={nlsHPCC.OK} disabled={!label} onClick={() => {
                 onOk(label);
@@ -181,7 +198,7 @@ export const MetricsOptions: React.FunctionComponent<MetricsOptionsProps> = ({
     const styles = useStyles();
 
     return <>
-        <MessageBox title={nlsHPCC.Options} show={show && !showAdd} setShow={setShow} minWidth={width}
+        <MessageBox title={nlsHPCC.Options} show={show && !showAdd && !showRename && !showDeleteConfirm} setShow={setShow} minWidth={width}
             footer={<>
                 <PrimaryButton
                     text={nlsHPCC.OK}
@@ -211,10 +228,14 @@ export const MetricsOptions: React.FunctionComponent<MetricsOptionsProps> = ({
                     <StackItemShim grow>
                         <Dropdown selectedKey={viewId} onChange={onDropdownChange} options={options} />
                     </StackItemShim>
-                    <Button appearance="subtle" icon={<BookmarkAddRegular />} title={nlsHPCC.Add} disabled hidden onClick={() => {
+                    <Button appearance="subtle" icon={<BookmarkAddRegular />} title={nlsHPCC.Add} onClick={() => {
                         setShowAdd(true);
                     }} />
-                    <Button appearance="subtle" icon={<DeleteRegular />} title={nlsHPCC.Delete} disabled hidden onClick={() => {
+                    <Button appearance="subtle" icon={<RenameRegular />} title={nlsHPCC.Rename} disabled={isDefaultView(viewId)} onClick={() => {
+                        setShowRename(true);
+                    }} />
+                    <Button appearance="subtle" icon={<DeleteRegular />} title={nlsHPCC.Delete} disabled={isDefaultView(viewId)} onClick={() => {
+                        setShowDeleteConfirm(true);
                     }} />
                 </StackShim>
                 <TabList selectedValue={selectedTab} onTabSelect={onTabSelect} size="medium">
@@ -304,6 +325,19 @@ export const MetricsOptions: React.FunctionComponent<MetricsOptionsProps> = ({
                 }
             </>
         </MessageBox>
-        <AddLabel show={showAdd} setShow={setShowAdd} onOk={onAddLabel} />
+        <AddLabel show={showAdd} setShow={setShowAdd} defaultLabel={`${viewId} copy`} onOk={onAddLabel} />
+        <AddLabel show={showRename} setShow={setShowRename} defaultLabel={viewId} title={nlsHPCC.Rename} onOk={onRenameLabel} />
+        <MessageBox title={nlsHPCC.Delete} show={showDeleteConfirm} setShow={setShowDeleteConfirm} minWidth={width}
+            footer={<>
+                <PrimaryButton text={nlsHPCC.Delete} onClick={() => {
+                    deleteView(viewId);
+                    setShowDeleteConfirm(false);
+                }} />
+                <DefaultButton text={nlsHPCC.Cancel} onClick={() => {
+                    setShowDeleteConfirm(false);
+                }} />
+            </>}>
+            {nlsHPCC.ConfirmRemoval}
+        </MessageBox>
     </>;
 };

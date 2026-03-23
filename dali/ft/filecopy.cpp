@@ -1613,11 +1613,13 @@ IAPICopyClient * FileSprayer::getAPICopyClient()
     if (needCalcCRC && !sources.item(0).hasCRC)
         return nullptr;
 
-    if (!distributedSource)
-        return nullptr;
-
     StringBuffer sourceClusterName;
-    distributedSource->getClusterName(0, sourceClusterName);
+    if (distributedSource)
+        distributedSource->getClusterName(0, sourceClusterName);
+    else if (savedSource)
+        savedSource->getClusterGroupName(0, sourceClusterName);
+    else
+        return nullptr;
     Owned<const IStoragePlane> sourcePlane = getDataStoragePlane(sourceClusterName.str(), false);
     if (!sourcePlane)
         return nullptr;
@@ -2816,10 +2818,28 @@ void FileSprayer::transferUsingAPI(IAPICopyClient * copyClient)
             }
 
             unsigned inputPartNum = sources.item(cur.whichInput).partNum;
-            IDistributedFilePart & srcDistFilePart = distributedSource->queryPart(inputPartNum);
             StringBuffer sourcePath;
-            srcDistFilePart.getStorageFilePath(sourcePath, copyNum);
-            unsigned sourceStripeNum = srcDistFilePart.getStripeNum(copyNum);
+            unsigned sourceStripeNum;
+            if (distributedSource)
+            {
+                IDistributedFilePart & srcDistFilePart = distributedSource->queryPart(inputPartNum);
+                srcDistFilePart.getStorageFilePath(sourcePath, copyNum);
+                sourceStripeNum = srcDistFilePart.getStripeNum(copyNum);
+            }
+            else
+            {
+                IPartDescriptor *srcPart = savedSource->queryPart(inputPartNum);
+                srcPart->getPath(sourcePath, copyNum);
+                const char *planeName = savedSource->queryClusterNum(0)->queryGroupName();
+                Owned<const IStoragePlane> storagePlane = getDataStoragePlane(planeName, false);
+                if (!storagePlane)
+                    throw makeStringExceptionV(DFSERR_MissingStoragePlane, "Missing storage plane: %s", planeName);
+                unsigned prefixLength = strlen(storagePlane->queryPrefix());
+                sourcePath.remove(0, prefixLength);
+                sourceStripeNum = calcStripeNumber(srcPart->queryPartIndex(),
+                    savedSource->queryProperties().getPropInt("@lfnHash"),
+                    storagePlane->numDevices());
+            }
 
             unsigned outputPartNum = targets.item(cur.whichOutput).partNum;
             IDistributedFilePart & tgtDistFilePart = distributedTarget->queryPart(outputPartNum);
@@ -2989,6 +3009,7 @@ void FileSprayer::setReplicate(bool _replicate)
 void FileSprayer::setSource(IDistributedFile * source)
 {
     distributedSource.set(source);
+    savedSource.setown(source->getFileDescriptor());
     srcAttr.setown(createPTreeFromIPT(&source->queryAttributes()));
     IPropertyTree *history = source->queryHistory();
     if (history)
@@ -3028,6 +3049,7 @@ void FileSprayer::setSource(IFileDescriptor * source)
 
 void FileSprayer::setSource(IFileDescriptor * source, unsigned copy, unsigned mirrorCopy)
 {
+    savedSource.set(source);
     IPropertyTree *attr = &source->queryProperties();
     compressedInput = source->isCompressed();
     extractSourceFormat(attr);

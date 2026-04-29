@@ -1827,12 +1827,17 @@ public:
                     if (!isContainerized()) {
                         // MORE: If containerized, a hosted plane may still have replication
                         i = (i+r)%n;
-                        setReplicateFilename(path,1);
+                        StringBuffer replicatePath(path);
+                        setReplicateFilename(replicatePath,1);
+                        SocketEndpoint primaryEp(ep);
                         ep = parent.rawgrp->queryNode(i).endpoint();
-                        rootsz = 0;
-                        parent.log(false,"Scanning %s directory %s",ep.getEndpointHostText(hostStr.clear()).str(),path.str());
-                        if (!parent.scanDirectory(i,ep,path,1,NULL,NULL,path.length(),0,nullptr,rootsz)) {
-                            ok = false;
+                        if (!streq(replicatePath, path) || !ep.equals(primaryEp))
+                        {
+                            rootsz = 0;
+                            parent.log(false,"Scanning %s directory %s",ep.getEndpointHostText(hostStr.clear()).str(),replicatePath.str());
+                            if (!parent.scanDirectory(i,ep,replicatePath,1,NULL,NULL,replicatePath.length(),0,nullptr,rootsz)) {
+                                ok = false;
+                            }
                         }
                     }
                 }

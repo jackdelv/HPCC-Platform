@@ -38,6 +38,9 @@
         "remote": {
           "$ref": "#/definitions/remoteStorage"
         },
+        "remoteForeignMap": {
+          "$ref": "#/definitions/remoteForeignMap"
+        },
         "spillPlane": {
           "$ref": "#/definitions/spillPlane"
         },
@@ -985,6 +988,27 @@
       "description": "Remote storage definitions",
       "type": "array",
       "items": { "$ref": "#/definitions/remoteStorageEntry" }
+    },
+    "remoteForeignMap": {
+      "description": "Maps remote storage names to foreign storage identifiers (e.g., Dali addresses)",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "foreign"],
+        "properties": {
+          "name": {
+            "description": "The name of the remote storage definition",
+            "type": "string",
+            "minLength": 1
+          },
+          "foreign": {
+            "description": "Foreign storage identifier (e.g., Dali IP address)",
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
     },
     "remoteStorageEntry": {
       "description": "Information about an individual remote storage definition",

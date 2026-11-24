@@ -228,6 +228,26 @@ security:
 ## minikube and docker for desktop), or using NFS mounted storage.
 
 storage:
+  # Optional remote DFS services:
+  # remote:
+  #   - name: remote-storage-prod
+  #     service: https://dfs-prod.example.com
+  #     planes:
+  #     - remote: data
+  #       local: data-plane-prod
+  #   - name: remote-storage-staging
+  #     service: https://dfs-staging.example.com
+  #     planes:
+  #     - remote: data
+  #       local: data-plane-staging
+  #
+  # Optional Dali-address to remote service mappings (requires matching remote service names):
+  # remoteForeignMap:
+  #   - name: remote-storage-prod
+  #     foreign: dali-prod.example.com
+  #   - name: remote-storage-staging
+  #     foreign: dali-staging.example.com
+
   planes:
   #   name: <required>
   #   prefix: <path>                        # Root directory for accessing the plane (if pvc defined), or url to access plane.

@@ -151,6 +151,27 @@ This property allows you to specify the costs associated with the storage so tha
         storageAtRest: 0.113                # Storage at rest cost: cost per GiB/month
 ```
 
+# Remote services and foreign storage address mappings
+
+Remote DFS services can be configured as a list under `storage.remote`. Each service has a `name`, a DFS `service` URL, and plane mappings. The `storage.remoteForeignMap` list maps foreign Dali addresses to remote service names:
+
+```yaml
+storage:
+  remote:
+  - name: remote-storage-prod
+    service: https://dfs-prod.example.com
+    planes:
+    - remote: data
+      local: data-plane-prod
+  remoteForeignMap:
+  - name: remote-storage-prod
+    foreign: dali.example.com
+```
+
+The `name` field references a remote service defined in `storage.remote`. When a foreign address matches the `foreign` field, that remote service is used for data access. Addresses match literally and case-sensitively.
+
+
+
 # Bare metal storage
 
 There are two aspects to using bare-metal storage in the Kubernetes system.  The first is the 'hostGroups' entry in the storage section which provides named lists of hosts.  The hostGroups entries can take one of two forms:

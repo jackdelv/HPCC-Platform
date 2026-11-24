@@ -194,6 +194,59 @@ static StringBuffer &makeForeignLFN(StringBuffer &foreignLfn, const char *daliip
     return foreignLfn.append(lfn);
 }
 
+
+class ForeignMapCache
+{
+private:
+    Owned<IPropertyTree> cache;
+    CriticalSection lock;
+    bool initialized;
+
+public:
+    ForeignMapCache() : lock("ForeignMapCache"), initialized(false) {}
+
+    const char *queryMappedRemoteStorage(const char *foreignAddress)
+    {
+        if (isEmptyString(foreignAddress))
+            return nullptr;
+
+        {
+            CriticalBlock block(lock);
+            if (!initialized)
+                buildCache();
+        }
+        // Safe to query cache outside lock since it's read-only after initialization
+        return cache->queryProp(foreignAddress);
+    }
+
+private:
+    void buildCache()
+    {
+        cache.setown(createPTree("cache"));
+        Owned<IPropertyTreeIterator> mappings = getGlobalConfigSP()->getElements("storage/remoteForeignMap");
+        ForEach(*mappings)
+        {
+            IPropertyTree &mapping = mappings->query();
+            const char *address = mapping.queryProp("@foreign");
+            const char *name = mapping.queryProp("@name");
+            if (isEmptyString(address) || isEmptyString(name))
+                throw makeStringException(-1, "storage.remoteForeignMap entries require non-empty foreign and name values");
+            if (cache->queryProp(address))
+                throw makeStringExceptionV(-1, "Duplicate storage.remoteForeignMap for foreign address '%s'", address);
+            if (!getRemoteStorage(name))
+                throw makeStringExceptionV(-1, "storage.remoteForeignMap for foreign address '%s' refers to unknown remote service '%s'", address, name);
+            cache->setProp(address, name);
+        }
+        initialized = true;
+    }
+};
+
+static ForeignMapCache &getForeignMapCache()
+{
+    static ForeignMapCache cache;
+    return cache;
+}
+
 //---------------------------------------------------------------------------------------------------------------------
 
 class ReferencedFileList;
@@ -358,6 +411,20 @@ public:
 
     void resolveLocalOrRemote(const StringArray &locations, const char *srcCluster, IUserDescriptor *user, const char *remoteStorage, const char *remotePrefix, bool checkLocalFirst, StringArray *subfiles, bool trackSubFiles, bool resolveLFNForeign=false);
     void resolveLocalOrForeign(const StringArray &locations, const char *srcCluster, IUserDescriptor *user, INode *remote, const char *remotePrefix, bool checkLocalFirst, StringArray *subfiles, bool trackSubFiles, bool resolveLFNForeign=false);
+
+    void applyForeignMapping()
+    {
+        if (!daliip.length())
+            return;
+        const char *mapped = getForeignMapCache().queryMappedRemoteStorage(daliip);
+        if (mapped)
+        {
+            remoteStorage.set(mapped);
+            daliip.clear();
+            flags &= ~RefFileLFNForeign;
+            flags |= RefFileLFNRemote;
+        }
+    }
 
     virtual bool needsCopying(bool cloneForeign) const override;
 
@@ -1166,6 +1233,7 @@ void ReferencedFileList::ensureFile(const char *ln, unsigned flags, const char *
         return;
     if (subfileNames)
         file->appendSubFileNames(*subfileNames);
+    file->applyForeignMapping();
     ReferencedFile *existing = map.getValue(file->getLogicalName());
     if (existing)
         existing->flags |= flags;
@@ -1411,6 +1479,19 @@ void ReferencedFileList::resolveFiles(const StringArray &locations, const char *
     unsigned numLocal = 0;
     srcCluster.set(_srcCluster);
     remotePrefix.set(_remotePrefix);
+
+    // Apply foreign mapping if remoteLocation is a Dali address
+    StringAttr mappedRemoteLocation;
+    if (!useRemoteStorage && remoteLocation)
+    {
+        const char *mapped = getForeignMapCache().queryMappedRemoteStorage(remoteLocation);
+        if (mapped)
+        {
+            mappedRemoteLocation.set(mapped);
+            remoteLocation = mappedRemoteLocation.str();
+            useRemoteStorage = true;
+        }
+    }
 
     // Superfile expansion inserts into the map, so snapshot files to avoid invalidating its iterator or resolving children twice.
     CIArrayOf<ReferencedFile> filesToResolve;
